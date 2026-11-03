@@ -1,18 +1,18 @@
 package com.ekeditor.app
 
 /**
- * Regras conservadoras de empilhamento do catálogo offline v0.5.3.
+ * Conservative stacking rules for the offline item catalog.
  *
- * As categorias do TSV não informam diretamente se um item empilha:
- * por segurança, o desconhecido e os equipamentos exigem 1 por slot.
- * Exceções conhecidas:
- * - 5013 Ancient Tolassian Tome e 5035 Tome of Lost Wisdom: tomos unitários.
- * - 5037 Deepfrost Cognac: bebida unitária segundo relatos de jogadores.
- * - outras bebidas especiais são tratadas conservadoramente como unitárias
- *   até serem verificadas em backups/jogo.
+ * TSV categories do not directly indicate whether an item can stack:
+ * for safety, unknown items and equipment are limited to 1 per slot.
+ * Known exceptions:
+ * - 5013 Ancient Tolassian Tome and 5035 Tome of Lost Wisdom: one per slot.
+ * - 5037 Deepfrost Cognac: reportedly one per slot, according to players.
+ * - other special drinks are conservatively treated as non-stackable
+ *   until verified against game data and backups.
  *
- * Uma pilha antiga inválida não é reescrita automaticamente: a regra vale
- * para qualquer nova inserção ou alteração, sem corromper outros slots.
+ * Existing invalid stacks are not rewritten automatically. This rule applies
+ * to new insertions and changes without corrupting other slots.
  */
 object ItemRules {
     private val stackableIds = setOf(
@@ -31,7 +31,7 @@ object ItemRules {
 
     fun ensureSlotQuantity(itemId: Int, quantity: Int) {
         require(quantity in 1..maxPerSlot(itemId)) {
-            "Este item não é empilhável. Cada cópia deve ocupar um espaço (quantidade máxima por espaço: ${maxPerSlot(itemId)})."
+            "This item cannot stack. Each copy requires its own slot (maximum per slot: ${maxPerSlot(itemId)})."
         }
     }
 }
