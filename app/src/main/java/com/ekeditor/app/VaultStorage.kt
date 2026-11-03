@@ -162,7 +162,7 @@ object VaultStorage {
                 val expected = change.expectedByPath[path]
                     ?: error("Missing replacement confirmation for " + path)
                 require(initial.slots[change.index] == expected) {
-                    "O espaço " + (change.index + 1) + " changed in " + path + ". Replacement canceled."
+                    "Slot " + (change.index + 1) + " changed in " + path + ". Replacement canceled."
                 }
                 ids[change.index] = change.itemId
                 counts[change.index] = change.amount
@@ -183,7 +183,7 @@ object VaultStorage {
         val oldVaults = read(before).associateBy { it.number }
         val newVaults = read(after).associateBy { it.number }
         require(oldVaults.keys == newVaults.keys) {
-            "A quantidade de baús changed in " + path
+            "The number of vaults changed in " + path
         }
         for ((n, v) in oldVaults) if (n != change.vault) {
             require(v == newVaults[n]) {
