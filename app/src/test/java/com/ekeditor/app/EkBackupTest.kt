@@ -125,8 +125,8 @@ class EkBackupTest {
         val first = EkBackup.apply(initial, EkBackup.EditPlan(paths, traitDelta = 5, skillDelta = 2))
         val second = EkBackup.apply(first, EkBackup.EditPlan(paths, traitDelta = 5, skillDelta = 2))
         assertTrue(EkBackup.inspect(second).all { it.traitPoints == 12 && it.skillPoints == 7 })
-        val reset = EkBackup.apply(second, EkBackup.EditPlan(paths, resetTraits = true))
-        assertTrue(EkBackup.inspect(reset).all { it.traitPoints == 0 && it.skillPoints == 7 })
+        val reset = EkBackup.apply(second, EkBackup.EditPlan(paths, resetTraits = true, resetSkills = true))
+        assertTrue(EkBackup.inspect(reset).all { it.traitPoints == 0 && it.skillPoints == 0 })
     }
 
     private fun companionSave(gold: Int): ByteArray = Base64.getEncoder().encode(
@@ -155,9 +155,11 @@ class EkBackupTest {
         val twice = EkBackup.apply(once, EkBackup.EditPlan(target, companionTraitDelta = 7, companionSkillDelta = 5))
         assertEquals(18, EkBackup.inspect(twice).single().companion?.traitPoints)
         assertEquals(12, EkBackup.inspect(twice).single().companion?.skillPoints)
-        val reset = EkBackup.apply(twice, EkBackup.EditPlan(target, resetCompanionTraits = true))
+        val reset = EkBackup.apply(twice, EkBackup.EditPlan(target, resetCompanionTraits = true, resetCompanionSkills = true))
         assertEquals(0, EkBackup.inspect(reset).single().companion?.traitPoints)
+        assertEquals(0, EkBackup.inspect(reset).single().companion?.skillPoints)
         assertEquals(2, EkBackup.inspect(reset).single().traitPoints)
+        assertEquals(3, EkBackup.inspect(reset).single().skillPoints)
     }
 
     @Test fun noCompanionDoesNotCreateOne() {
@@ -167,4 +169,35 @@ class EkBackupTest {
         assertTrue(EkBackup.inspect(changed).all { it.companion == null })
     }
 
+
+    @Test fun blankAndInvalidNumberInputsReturnReadableErrors() {
+        for (raw in listOf("", "   ", "abc", "999999999999999999999999", "-2")) {
+            val failure = runCatching { EkBackup.parseNumberInput(raw, "Ouro", 999_999_999) }.exceptionOrNull()
+            assertTrue("Deveria rejeitar '$raw' sem travar", failure is IllegalArgumentException)
+            assertTrue(failure?.message?.isNotBlank() == true)
+        }
+        assertTrue(runCatching { EkBackup.parseNumberInput("", "Habilidades", 999, 1) }.isFailure)
+        assertTrue(runCatching { EkBackup.parseNumberInput("", "Atributos do companheiro", 999, 1) }.isFailure)
+        assertEquals(0L, EkBackup.parseNumberInput("0", "Ouro", 999_999_999))
+        assertEquals(10L, EkBackup.parseNumberInput(" 10 ", "Atributos", 999, 1))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsSimultaneousSkillResetAndAddition() {
+        val paths = EkBackup.inspect(fixture()).map { it.path }.toSet()
+        EkBackup.apply(fixture(), EkBackup.EditPlan(paths, skillDelta = 5, resetSkills = true))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsCompanionSkillResetAndAdditionTogether() {
+        val paths = EkBackup.inspect(fixture()).map { it.path }.toSet()
+        EkBackup.apply(fixture(), EkBackup.EditPlan(paths, companionSkillDelta = 5, resetCompanionSkills = true))
+    }
+
+    @Test fun resetCompanionSkillsDoesNotCreateMissingCompanion() {
+        val original = fixture()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val changed = EkBackup.apply(original, EkBackup.EditPlan(all, resetCompanionSkills = true))
+        assertTrue(EkBackup.inspect(changed).all { it.companion == null })
+    }
 }
