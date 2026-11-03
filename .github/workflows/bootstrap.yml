@@ -19,13 +19,18 @@ jobs:
           set -euo pipefail
           base64 --decode .bootstrap/ek-source.tar.xz.base64 > /tmp/ek-source.tar.xz
           tar -xJf /tmp/ek-source.tar.xz
+          base64 --decode .bootstrap/ek-v03.delta.b64 > /tmp/ek-v03.tar.xz
+          tar -xJf /tmp/ek-v03.tar.xz
+          rm -f app/src/main/java/com/ekeditor/app/EkFileUserService.kt
+          rm -f app/src/main/aidl/com/ekeditor/app/IEkFileService.aidl
+          rm -f .github/workflows/android.yml
           test -f app/build.gradle.kts
-          test -f .github/workflows/android.yml
-          git add README.md TESTES.md app build.gradle.kts settings.gradle.kts gradle.properties tools catalogo
+          ! grep -q 'dev.rikka.shizuku' app/build.gradle.kts
+          git add -A README.md TESTES.md app build.gradle.kts settings.gradle.kts gradle.properties tools catalogo
           if ! git diff --cached --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Publica codigo-fonte EK Save Editor v0.2.1"
+            git commit -m "Atualiza EK Save Editor v0.3: aplicar e visualizar edicoes"
             git push
           fi
       - uses: actions/setup-java@v4
