@@ -21,6 +21,11 @@ jobs:
           tar -xJf /tmp/ek-source.tar.xz
           base64 --decode .bootstrap/ek-v03.delta.b64 > /tmp/ek-v03.tar.xz
           tar -xJf /tmp/ek-v03.tar.xz
+          cat .bootstrap/ek-v04.part{1..6} | base64 --decode > /tmp/ek-v04.tar.xz
+          echo "471484ad237fcf11a17b19d37703cc638fc3e7e9e8b5462291fdffe0ea2f2b0b  /tmp/ek-v04.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/ek-v04.tar.xz
+          python3 tools/generate_catalog.py
+          test "$(grep -cv '^#' app/src/main/assets/ek_items.tsv)" -ge 520
           rm -f app/src/main/java/com/ekeditor/app/EkFileUserService.kt
           rm -f app/src/main/aidl/com/ekeditor/app/IEkFileService.aidl
           rm -f .github/workflows/android.yml
@@ -30,7 +35,7 @@ jobs:
           if ! git diff --cached --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Atualiza EK Save Editor v0.3: aplicar e visualizar edicoes"
+            git commit -m "EK Save Editor v0.4: catalogo, companheiros, todos os saves e rotacao"
             git push
           fi
       - uses: actions/setup-java@v4
