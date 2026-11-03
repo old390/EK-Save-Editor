@@ -194,7 +194,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Save editor by old390 • v0.7.0", 16f, GOLD, true).apply {
+        body.addView(text("Save editor by old390 • v0.8.0", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
