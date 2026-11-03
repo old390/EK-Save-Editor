@@ -1,0 +1,48 @@
+name: Publicar e compilar EK Save Editor
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bootstrap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extrair projeto Android do pacote inicial
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode .bootstrap/ek-source.tar.xz.base64 > /tmp/ek-source.tar.xz
+          tar -xJf /tmp/ek-source.tar.xz
+          test -f app/build.gradle.kts
+          test -f .github/workflows/android.yml
+          git add README.md TESTES.md app build.gradle.kts settings.gradle.kts gradle.properties tools catalogo .github/workflows/android.yml
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Publica codigo-fonte EK Save Editor v0.2.1"
+            git push
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Instalar Android SDK 35
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Executar testes e compilar APK
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Publicar APK para download
+        uses: actions/upload-artifact@v4
+        with:
+          name: EKSaveEditor-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
