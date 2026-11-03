@@ -1,4 +1,4 @@
-# EK Save Editor v0.6.0 — feito por old390
+# EK Save Editor v0.7.0 — feito por old390
 
 Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Não afiliado aos criadores do jogo.
 
@@ -50,3 +50,15 @@ Criado por old390: https://github.com/old390/EK-Save-Editor
 - Se a posição estiver ocupada em outro save, o aplicativo mostra o conteúdo de **cada save** e só substitui mediante confirmação. Editar um baú cheio sem espaços vazios exige substituição consciente.
 - O botão **Desbloquear baú** ativa o indicador daquele baú nos saves, sem pagar ouro no jogo. É uma operação separada e confirmada.
 - Mantenha o `EK.bak` original seguro. O estado dos baús no jogo só muda depois de exportar e restaurar o backup modificado.
+
+## v0.7.0 — Suporte a múltiplos personagens
+
+- Analisa as pastas `saves/<id>/` em vez de presumir que só existe o primeiro personagem.
+- Mostra o menu **Escolher personagem** após importar o arquivo. Exibe nome, classe, nível e número de saves do personagem.
+- No exemplo real `EK(4).bak`, há **Arthur da Cruz** (clérigo nível 17, pasta `saves/0`, 4 saves) e **Shep Sossar** (guerreiro nível 1, pasta `saves/2`, 3 saves).
+- A edição passa a atingir **somente a pasta do personagem escolhido**, preservando integralmente os outros saves, arquivos de mapa e dados globais.
+- Personagens novos podem não ter os campos `extraTraitPoints` e `bonusPoints`: o editor os interpreta como zero e cria os campos somente ao adicionar pontos pela primeira vez.
+- Cada personagem tem seu próprio inventário e seus próprios baús. Quando um personagem ainda não tiver `worldContainers`, a seção de baús aparece como indisponível, sem criar estruturas novas automaticamente.
+- É possível alternar de personagem antes de exportar o mesmo `EK.bak` e preservar todas as alterações de ambos. O personagem selecionado também é mantido após a recriação da interface.
+
+**Segurança:** preserve uma cópia do `EK.bak` original e teste a restauração no jogo antes de considerar esta versão definitiva.
