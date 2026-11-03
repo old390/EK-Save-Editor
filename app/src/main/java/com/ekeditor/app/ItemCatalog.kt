@@ -13,7 +13,7 @@ class ItemCatalog(context: Context) {
             }.toList()
     }
     private val indexed = items.associateBy { it.id }
-    fun name(id: Int): String = indexed[id]?.name ?: "Item não identificado no catálogo"
+    fun name(id: Int): String = indexed[id]?.name ?: "Item not found in catalog"
     fun potions(): List<Item> = items.filter { it.category.equals("POTION", true) }
     fun find(query: String, potionsOnly: Boolean = false): List<Item> {
         val typed = query.trim()
