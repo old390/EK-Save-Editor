@@ -161,7 +161,7 @@ object EkBackup {
     /** UI-independent input validation, including empty and invalid values. */
     fun parseNumberInput(raw: String, label: String, max: Long, min: Long = 0): Long {
         val clean = raw.trim()
-        require(clean.isNotEmpty()) { "Digite um valor em '$label' antes de aplicar." }
+        require(clean.isNotEmpty()) { "Enter a value for '$label' before applying." }
         val number = clean.toLongOrNull() ?: throw IllegalArgumentException("Enter a valid whole number for '$label'.")
         require(number in min..max) { "$label precisa estar entre $min e $max." }
         return number
@@ -376,7 +376,7 @@ object EkBackup {
         return TraitBalance(level, byLevel, bonus, spent, byLevel + bonus - spent)
     }
 
-    /** Insere o campo extra/bonus ausente no bloco correto sem remover os outros. */
+    /** Insert a missing extra/bonus field into the correct block without removing any others. */
     private fun updateBonusField(character: String, regex: Regex, field: String, marker: String, value: Int): String {
         if (regex.containsMatchIn(character)) return replaceNumber(character, regex, value)
         val range = block(character, marker) ?: error("Missing $marker block in character data")
@@ -468,7 +468,7 @@ object EkBackup {
             freeSkillPoints = skillsBalance?.free,
             spentSkillPoints = skillsBalance?.spent
         )
-    }.also { require(it.isNotEmpty()) { "Nenhum save reconhecido no EK.bak" } }
+    }.also { require(it.isNotEmpty()) { "No recognizable saves found in EK.bak" } }
 
     /** Identify four Town Hall vaults in each save without confusing them with the backpack. */
     fun inspectVaults(data: ByteArray): Map<String, List<VaultStorage.VaultInfo>> =
