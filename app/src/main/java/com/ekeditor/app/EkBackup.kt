@@ -18,6 +18,8 @@ object EkBackup {
     private val anyTraitPattern = Regex("""(?m)^(\t+extraTraitPoints:\s*)(\d+)(\s*)$""")
     private val anySkillPattern = Regex("""(?m)^(\t+bonusPoints:\s*)(\d+)(\s*)$""")
     private val backpackPattern = Regex("""(?m)^(\tbackpack: \{\s*\n\t\titemList: \[)([^\]]*)(\]\s*\n\t\tstackUnits: \[)([^\]]*)(\])""")
+    private val spentTraitPattern = Regex("""(?m)^\t{4}spentPoints:\s*\[([^\]]*)\]""")
+    private val playerLevelPattern = Regex("""(?m)^\t{4}cached_level:\s*(\d+)\s*$""")
     private val activeCompanionPattern = Regex("""(?m)^\t\tactiveCompanion:\s*([^\r\n]*)""")
 
     data class CompanionInfo(val name: String, val traitPoints: Int, val skillPoints: Int)
@@ -31,7 +33,11 @@ object EkBackup {
         val freeSlots: Int,
         val inventory: Map<Int, Int>,
         val companion: CompanionInfo? = null,
-        val inventorySlots: List<InventorySlot> = emptyList()
+        val inventorySlots: List<InventorySlot> = emptyList(),
+        /** Pontos disponíveis calculados: total por nível + extras − gastos. */
+        val freeTraitPoints: Int? = null,
+        val characterLevel: Int? = null,
+        val spentTraitPoints: Int? = null
     )
     /** Item na posição real do inventário, preservando inclusive espaços vazios. */
     data class InventorySlot(val id: Int, val count: Int)
@@ -144,6 +150,28 @@ object EkBackup {
         ?: error("Campo $key não encontrado")
     private fun gold(text: String): Long = goldPattern.find(text)?.groupValues?.get(2)?.toLong()
         ?: error("Ouro não encontrado")
+    private data class TraitBalance(
+        val level: Int, val byLevel: Int, val extra: Int, val spent: Int, val free: Int
+    )
+
+    /** 4 no primeiro nível, 2 por nível até o 15, e 3 do 16 em diante. */
+    private fun traitPointsFromLevel(level: Int): Int {
+        require(level in 1..999) { "Nível de personagem inválido" }
+        return 4 + (level - 1).coerceAtMost(14) * 2 + (level - 15).coerceAtLeast(0) * 3
+    }
+
+    private fun playerTraitBalance(player: String): TraitBalance? {
+        val level = playerLevelPattern.find(player)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        if (level !in 1..999) return null
+        val raw = spentTraitPattern.find(player)?.groupValues?.get(1) ?: return null
+        val points = raw.split(',').map { it.trim().toIntOrNull() ?: return null }
+        if (points.size != 6 || points.any { it < 0 }) return null
+        val spent = points.sum()
+        val extra = one(player, traitPattern, "atributos extras")
+        val byLevel = traitPointsFromLevel(level)
+        return TraitBalance(level, byLevel, extra, spent, byLevel + extra - spent)
+    }
+
     private fun numbers(raw: String): MutableList<Int> = raw.split(',').map { it.trim().toInt() }.toMutableList()
     private fun backpack(text: String): MatchResult = backpackPattern.find(text) ?: error("Inventário não encontrado")
 
@@ -199,6 +227,7 @@ object EkBackup {
         val ids = numbers(pack.groupValues[2])
         val units = numbers(pack.groupValues[4])
         require(ids.size == units.size) { "Inventário incompatível" }
+        val balance = playerTraitBalance(player)
         SaveInfo(
             path = item.entry.name,
             hero = Regex("""(?m)^\t\tname: (.*)$""").find(player)?.groupValues?.get(1)?.trim() ?: "Personagem",
@@ -210,7 +239,10 @@ object EkBackup {
             inventory = ids.zip(units).filter { it.first > 0 }
                 .groupBy({ it.first }, { it.second }).mapValues { (_, amounts) -> amounts.sum() },
             companion = companionInfo(text),
-            inventorySlots = ids.zip(units).map { (id, count) -> InventorySlot(id, count) }
+            inventorySlots = ids.zip(units).map { (id, count) -> InventorySlot(id, count) },
+            freeTraitPoints = balance?.free,
+            characterLevel = balance?.level,
+            spentTraitPoints = balance?.spent
         )
     }.also { require(it.isNotEmpty()) { "Nenhum save reconhecido no EK.bak" } }
 
@@ -256,8 +288,19 @@ object EkBackup {
         val playerRange = playerBounds(text)
         var player = text.substring(playerRange)
         if (plan.gold != null) player = replaceNumber(player, goldPattern, plan.gold)
-        val traitValue = if (plan.traitPoints != null) plan.traitPoints else
-            increment(one(player, traitPattern, "atributos"), plan.traitDelta, plan.resetTraits, "Atributos")
+        val traitValue = when {
+            plan.traitPoints != null -> plan.traitPoints
+            plan.resetTraits -> {
+                val progress = playerTraitBalance(player)
+                    ?: error("Nível e pontos gastos indisponíveis: não é seguro zerar atributos.")
+                val requiredExtra = progress.spent - progress.byLevel
+                require(requiredExtra in 0..999) {
+                    "Este personagem tem pontos do nível ainda livres. Não é possível zerá-los sem alterar pontos já distribuídos."
+                }
+                requiredExtra
+            }
+            else -> increment(one(player, traitPattern, "atributos extras"), plan.traitDelta, false, "Atributos")
+        }
         val skillValue = if (plan.skillPoints != null) plan.skillPoints else
             increment(one(player, skillPattern, "habilidades"), plan.skillDelta, plan.resetSkills, "Habilidades")
         if (traitValue != null) player = replaceNumber(player, traitPattern, traitValue)
@@ -320,9 +363,23 @@ object EkBackup {
                 if (plan.gold != null) require(now.gold == plan.gold)
                 if (plan.traitPoints != null) require(now.traitPoints == plan.traitPoints)
                 if (plan.skillPoints != null) require(now.skillPoints == plan.skillPoints)
-                if (plan.resetTraits) require(now.traitPoints == 0)
+                if (plan.resetTraits) require(now.freeTraitPoints == 0) {
+                    "Não foi possível zerar os pontos livres em ${prev.path}"
+                }
                 if (plan.resetSkills) require(now.skillPoints == 0)
-                if (plan.traitDelta != null) require(now.traitPoints == prev.traitPoints + plan.traitDelta)
+                if (plan.traitDelta != null) {
+                    require(now.traitPoints == prev.traitPoints + plan.traitDelta) {
+                        "Falha ao somar extras em ${prev.path}"
+                    }
+                    if (prev.freeTraitPoints != null) {
+                        require(now.freeTraitPoints == prev.freeTraitPoints + plan.traitDelta) {
+                            "O saldo real não aumentou como esperado em ${prev.path}"
+                        }
+                        require(now.spentTraitPoints == prev.spentTraitPoints) {
+                            "Os pontos gastos foram alterados inesperadamente"
+                        }
+                    }
+                }
                 if (plan.skillDelta != null) require(now.skillPoints == prev.skillPoints + plan.skillDelta)
                 if (plan.resetCompanionTraits && prev.companion != null) require(now.companion?.traitPoints == 0)
                 if (plan.resetCompanionSkills && prev.companion != null) require(now.companion?.skillPoints == 0)
