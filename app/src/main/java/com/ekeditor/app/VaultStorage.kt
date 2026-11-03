@@ -121,7 +121,7 @@ object VaultStorage {
         val initial = chosen(text, change.vault)
         if (change.action == Action.UNLOCK) {
             val field = Regex("""(?m)^(\t""" + Regex.escape(flag(change.vault)) + """:\s*)(true|false)([ \t]*)$""")
-            val flagMatch = field.find(text) ?: error("Campo de desbloqueio missing in " + path)
+            val flagMatch = field.find(text) ?: error("Unlock flag is missing in " + path)
             if (initial.unlocked) return text
             return text.replaceRange(flagMatch.range,
                 flagMatch.groupValues[1] + "true" + flagMatch.groupValues[3])
