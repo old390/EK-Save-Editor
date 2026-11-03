@@ -599,4 +599,107 @@ class EkBackupTest {
             slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 999, addQuantity = true))))
     }
 
+
+    private fun mixedFourSaveInventories(): ByteArray =
+        ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                val entries = listOf(
+                    Triple("auto.sav", "5070, 0, 0, 0", "7, 0, 0, 0"),
+                    Triple("auto2.sav", "554, 726, 3001, 4001", "1, 1, 1, 1"),
+                    Triple("game.sav", "554, 5070, 0, 0", "1, 7, 0, 0"),
+                    Triple("game2.sav", "554, 726, 0, 0", "1, 1, 0, 0")
+                )
+                for ((name, itemIds, counts) in entries) {
+                    val plain = String(Base64.getDecoder().decode(save(200)), Charsets.UTF_8)
+                        .replace("itemList: [ 0, 0, 0, 0 ]", "itemList: [ $itemIds ]")
+                        .replace("stackUnits: [ 0, 0, 0, 0 ]", "stackUnits: [ $counts ]")
+                    zip.putNextEntry(ZipEntry("saves/0/$name"))
+                    zip.write(Base64.getEncoder().encode(plain.toByteArray(Charsets.UTF_8)))
+                    zip.closeEntry()
+                }
+                zip.putNextEntry(ZipEntry("saves/global.sav"))
+                zip.write("metadata unchanged".toByteArray())
+                zip.closeEntry()
+            }
+        }.toByteArray()
+
+    @Test fun regressionOneSaveFullWhilePreviewHasVacanciesIsDetected() {
+        val backup = mixedFourSaveInventories()
+        val all = EkBackup.inspect(backup)
+        assertEquals(4, all.size)
+        assertTrue(all.first { it.path.endsWith("/auto.sav") }.freeSlots > 0)
+        assertEquals(0, all.first { it.path.endsWith("/auto2.sav") }.freeSlots)
+        val result = runCatching {
+            EkBackup.apply(backup, EkBackup.EditPlan(all.map { it.path }.toSet(),
+                items = listOf(EkBackup.ItemAdd(750, 1))))
+        }
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("Inventário cheio") == true)
+    }
+
+    @Test fun fullInventoryRequiresExplicitReplacementAndPreservesOtherSlots() {
+        val backup = mixedFourSaveInventories()
+        val original = EkBackup.inspect(backup)
+        val target = original.map { it.path }.toSet()
+        val expectedByPath = original.associate { it.path to it.inventorySlots[0] }
+        val updated = EkBackup.apply(backup, EkBackup.EditPlan(target,
+            slotReplacements = listOf(EkBackup.SlotReplace(
+                0, 750, 15, expectedByPath))))
+        val inspected = EkBackup.inspect(updated)
+        assertEquals(4, inspected.size)
+        for (info in inspected) {
+            val before = original.single { it.path == info.path }
+            assertEquals(EkBackup.InventorySlot(750, 15), info.inventorySlots[0])
+            assertEquals(before.inventorySlots.drop(1), info.inventorySlots.drop(1))
+        }
+        assertTrue(entries(backup).getValue("saves/global.sav")
+            .contentEquals(entries(updated).getValue("saves/global.sav")))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun replacementRefusesStaleSlotDataWithoutChangingBackup() {
+        val backup = mixedFourSaveInventories()
+        val originals = EkBackup.inspect(backup)
+        val expected = originals.associate { it.path to it.inventorySlots[0] }.toMutableMap()
+        expected["saves/0/auto2.sav"] = EkBackup.InventorySlot(999, 999)
+        EkBackup.apply(backup, EkBackup.EditPlan(originals.map { it.path }.toSet(),
+            slotReplacements = listOf(EkBackup.SlotReplace(0, 750, 4, expected))))
+    }
+
+    @Test fun gridDeleteMissingIdIsSafeForAllSavesEvenIfAnotherOneFull() {
+        val backup = mixedFourSaveInventories()
+        val paths = EkBackup.inspect(backup).map { it.path }.toSet()
+        val edited = EkBackup.apply(backup, EkBackup.EditPlan(paths,
+            slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 0))))
+        val before = EkBackup.inspect(backup).associateBy { it.path }
+        val after = EkBackup.inspect(edited)
+        assertEquals(4, after.size)
+        assertTrue(after.all { 5070 !in it.inventory })
+        for (save in after) {
+            val old = before[save.path]!!
+            for ((id, count) in old.inventory) if (id != 5070) {
+                assertEquals(count, save.inventory[id])
+            }
+        }
+    }
+
+    @Test fun gridSetQuantityAddsMissingIdToOtherSaveOnlyWhenRoomExists() {
+        val input = archiveWithShiftedItem()
+        val paths = EkBackup.inspect(input).map { it.path }.toSet()
+        val edited = EkBackup.apply(input, EkBackup.EditPlan(paths,
+            slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 12))))
+        assertTrue(EkBackup.inspect(edited).all { it.inventory[5070] == 12 })
+    }
+
+    @Test fun gridSetQuantityWhenIdMissingInOneFullSaveShowsReason() {
+        val input = mixedFourSaveInventories()
+        val paths = EkBackup.inspect(input).map { it.path }.toSet()
+        val failure = runCatching {
+            EkBackup.apply(input, EkBackup.EditPlan(paths,
+                slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 12))))
+        }
+        assertTrue(failure.isFailure)
+        assertTrue(failure.exceptionOrNull()?.message?.contains("auto2.sav") == true)
+    }
+
 }
