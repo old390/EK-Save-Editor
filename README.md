@@ -1,4 +1,4 @@
-# EK Save Editor v0.5.1 — feito por old390
+# EK Save Editor v0.5.2 — feito por old390
 
 Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Não afiliado aos criadores do jogo.
 
@@ -6,7 +6,7 @@ Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Nã
 
 1. Crie um **backup atualizado dentro do jogo**. Preserve uma cópia original antes de editar.
 2. Importe `EK.bak` pelo seletor de arquivos do Android. Não requer root nem Shizuku.
-3. No inventário visual, toque num item para **somar quantidade**, **definir quantidade** ou **excluir um stack**. Toque num **espaço vazio** para buscar um item por nome/ID, definir a quantidade e adicioná-lo naquela célula (desde que esteja vazia em todos os saves). Se houver divergência entre saves, a ação será cancelada.
+3. No inventário visual, toque num item para **somar quantidade**, **definir quantidade**, **excluir um stack** ou **substituir o item**. Toque num **espaço vazio** para buscar um item e inseri-lo. Se o mesmo espaço estiver ocupado em outro save, o editor mostra quais itens serão substituídos e pede sua confirmação. Também é possível escolher uma posição quando a adição pelo painel encontrar algum save com inventário cheio.
 4. Some pontos de ouro, atributos ou habilidades do personagem principal e do companheiro ativo. A correção v0.5.1 reconhece que o companheiro não recebe quatro pontos iniciais: por exemplo, no nível 14, com 10 extras e 24 gastos, há 0 livres; após somar 10, há 10 livres. Os saldos reais são calculados pelo nível, extras recebidos e gastos. O custo das habilidades é consultado em uma tabela de 76 entradas derivada da wiki oficial. Habilidades não catalogadas mostram saldo indisponível, sem inventar um valor.
 5. Use **Conferir valores de todos os saves**. Cada modificação aplica-se a todos os saves presentes no `EK.bak`.
 6. Exporte o `EK.bak` modificado. Copie-o para `/storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak` e **restaure o backup pelo menu do próprio jogo**.
@@ -33,3 +33,10 @@ Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Nã
 Android SDK 35, JDK 17, Gradle 8.9. O GitHub Actions executa testes unitários e `:app:assembleDebug` e publica `app-debug.apk` como artefato.
 
 Criado por old390: https://github.com/old390/EK-Save-Editor
+
+## Correção 0.5.2 — inventários divergentes
+
+- O save exibido na grade é apenas uma referência. Outros saves podem ter posições e itens diferentes. Por isso, a falta de espaço em **um único** save bloqueava a inserção em todos.
+- Somar, definir ou excluir por ID procura o item em cada save. Se ele estiver ausente, uma edição que adiciona quantidades procura uma posição livre; a exclusão não mexe nesse save. Se não houver espaço, o editor explica qual save está cheio.
+- Para **substituir** itens em um slot, o app exibe o conteúdo daquela posição **em cada save** e solicita confirmação. Nenhum item é sobrescrito silenciosamente. A troca é validada contra o estado que foi mostrado antes de escrever.
+- Antes de restaurar o backup, preserve uma cópia do arquivo original. Uma substituição explicitamente confirmada pode remover itens diferentes em cada save.
