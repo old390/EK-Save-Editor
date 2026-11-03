@@ -1,39 +1,30 @@
-# EK Save Editor — v0.3.0
+# EK Save Editor v0.4 — feito por old390
 
-Ferramenta Android independente em português para editar **backups** do jogo Exiled Kingdoms. Não é afiliada aos criadores do jogo.
+Editor de backups **Exiled Kingdoms**, Android, Kotlin. Independente dos criadores do jogo.
 
-## O que mudou
+## Como usar
+1. No jogo, crie um **backup atualizado**.
+2. Importe **EK.bak** com o seletor de arquivos. Não requer Shizuku nem root.
+3. Edite ouro; adicione armas, itens e poções por uma busca offline; some pontos livres de atributos e habilidades e, se houver companheiro ativo, edite também os pontos dele.
+4. Cada aplicação altera **todos os saves** do EK.bak. A tela mostra um inventário de referência (preferência pelo auto.sav), com nomes em vez de IDs. É possível conferir espaços livres mínimos entre os saves.
+5. Guarde uma cópia do backup original e exporte o **EK.bak** modificado.
+6. Copie o backup para `/storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak`, depois **restaure pelo menu do jogo**. O editor não substitui saves ativos.
 
-- **Shizuku removido**: não há dependência, botão, permissão ou serviço Shizuku.
-- Escolha um arquivo `EK.bak` pelo seletor de arquivos do Android.
-- **Aplicar ouro**, **Aplicar atributos**, **Aplicar habilidades**, **Aplicar poções**, **Aplicar item personalizado**, **Adicionar cada arma**: botões independentes.
-- As alterações são validadas e atualizadas no próprio editor: ouro, pontos livres e inventário por save.
-- Escolha individual ou todos os saves. Cada clique aplica apenas a edição da seção escolhida aos saves selecionados, sem desfazer as alterações anteriores.
-- A modificação permanece **na memória** até tocar em **Exportar EK.bak modificado**. O backup original permanece intocado.
-- Opção de exportar uma cópia do original. Só é possível exportar o modificado depois de aplicar pelo menos uma alteração.
+## Novidades da v0.4
+- Remoção do seletor de saves: sempre modifica todos.
+- Busca por nome ou ID, com **724 registros**, incluindo **45 poções e consumíveis**.
+- Pontos acumulativos e botão para **zerar apenas os pontos livres de atributos**, sem apagar atributos já distribuídos.
+- Campos de companheiro somente quando existe um companheiro ativo.
+- Preservação da edição na rotação da tela e recuperação de sessão.
+- Bloqueio preventivo da inserção de itens quando um save não tem espaço disponível.
 
-## Processo de uso
+## Catálogo
+Arquivo offline `app/src/main/assets/ek_items.tsv`. Dados extraídos de uma discussão comunitária de setembro de 2021:
+https://steamcommunity.com/app/788270/discussions/0/2515771867786715062/
 
-1. Dentro de Exiled Kingdoms, crie um **backup atualizado**.
-2. No editor, toque em **Selecionar EK.bak** e abra o arquivo do jogo.
-3. Escolha um save ou todos, digite o valor e toque em **Aplicar** na seção desejada. Confira os valores alterados ainda no aplicativo.
-4. Toque em **Exportar EK.bak modificado** e salve o arquivo no Android. Guarde o arquivo original em outro lugar.
-5. Coloque o EK.bak modificado no diretório `/storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak`. Dependendo da versão do Android, esse passo pode exigir um gerenciador de arquivos com permissões apropriadas.
-6. Abra Exiled Kingdoms e use a função **restaurar backup** do próprio jogo. O editor não modifica os saves ativos automaticamente.
+A lista não é oficial e pode não incluir itens introduzidos posteriormente. Algumas poções do catálogo são outros tipos de consumíveis. Itens exclusivos ou não empilháveis podem exigir testes específicos no jogo.
 
-## Segurança e limites
+## Segurança e desenvolvimento
+O app só exporta backups, preservando os demais arquivos e os saves originais em memória. Tenha uma cópia separada antes da restauração. A compilação executa os testes automatizados `:app:testDebugUnitTest` antes de criar `app-debug.apk`.
 
-- O núcleo só modifica entradas ZIP de save selecionadas. Valida integralmente o arquivo recompactado e confirma valores escritos.
-- Ouro: 0 a 999.999.999. Pontos livres de atributos/habilidades: 0 a 999. Quantidades de itens: 1 a 999.
-- As armas e poções são inseridas com IDs definidos, não há catálogo completo ainda.
-- Valores do inventário são apresentados por ID, mesmo quando não há nomes cadastrados.
-- Não há acesso automático à pasta interna do jogo, nem necessidade de root ou Shizuku para **importar e exportar**.
-- É necessário testar a **restauração real** com o Exiled Kingdoms; os testes automatizados verificam formato e consistência, não a aceitação pelo jogo.
-
-## Compilar
-
-Android SDK 35, JDK 17, Gradle 8.9, Android Gradle Plugin 8.7.3, Kotlin Plugin 2.0.21.
-
-`gradle :app:testDebugUnitTest :app:assembleDebug`
-
-O APK debug será `app/build/outputs/apk/debug/app-debug.apk`.
+Criado por old390 — https://github.com/old390/EK-Save-Editor
