@@ -706,4 +706,82 @@ class EkBackupTest {
         assertTrue(failure.exceptionOrNull()?.message?.contains("auto2.sav") == true)
     }
 
+
+    @Test fun tomeAndEquipmentAreUnitaryWhileMedipackIsStackable() {
+        for (id in listOf(5013, 5035, 10001, 554, 750, 450)) {
+            assertTrue("Item $id deveria ocupar apenas uma unidade por espaço", !ItemRules.isStackable(id))
+            assertEquals(1, ItemRules.maxPerSlot(id))
+            assertTrue(runCatching { ItemRules.ensureSlotQuantity(id, 2) }.isFailure)
+        }
+        assertTrue(ItemRules.isStackable(5070))
+        assertTrue(ItemRules.isStackable(5000))
+        assertTrue(ItemRules.isStackable(6001))
+        ItemRules.ensureSlotQuantity(5070, 999)
+    }
+
+    @Test fun addingThreeAncientTolassianTomesUsesThreeSeparateSlotsInEverySave() {
+        val original = fixture()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val edited = EkBackup.apply(original, EkBackup.EditPlan(
+            all, items = listOf(EkBackup.ItemAdd(5013, 3))))
+        for (save in EkBackup.inspect(edited)) {
+            assertEquals(3, save.inventory[5013])
+            assertEquals(3, save.inventorySlots.count { it.id == 5013 && it.count == 1 })
+            assertEquals(1, save.inventorySlots.count { it.id == 0 })
+        }
+    }
+
+    @Test fun tappingTomeAddsAnotherCopyInSeparateSlotAndCanDeleteOneCopy() {
+        val original = fixture()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val withOne = EkBackup.apply(original, EkBackup.EditPlan(
+            all, slotInserts = listOf(EkBackup.SlotInsert(0, 5013, 1))))
+        val added = EkBackup.apply(withOne, EkBackup.EditPlan(
+            all, slotEdits = listOf(EkBackup.SlotEdit(
+                0, 5013, 1, 2, addQuantity = true))))
+        for (save in EkBackup.inspect(added)) {
+            assertEquals(3, save.inventory[5013])
+            assertTrue(save.inventorySlots.filter { it.id == 5013 }.all { it.count == 1 })
+        }
+        val deletedOne = EkBackup.apply(added, EkBackup.EditPlan(
+            all, slotEdits = listOf(EkBackup.SlotEdit(
+                0, 5013, 1, 0))))
+        for (save in EkBackup.inspect(deletedOne)) {
+            assertEquals(2, save.inventory[5013])
+            assertEquals(2, save.inventorySlots.count { it.id == 5013 && it.count == 1 })
+        }
+    }
+
+    @Test fun enteringMoreTomesThanFreeSlotsIsRejectedWithoutCorruption() {
+        val original = fixture()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        assertTrue(runCatching {
+            EkBackup.apply(original, EkBackup.EditPlan(all,
+                items = listOf(EkBackup.ItemAdd(5035, 5))))
+        }.isFailure)
+        assertTrue(EkBackup.inspect(original).all { it.inventory.isEmpty() })
+    }
+
+    @Test fun nonStackableReplacementCannotSetTwoUnitsInSameSlot() {
+        val original = fixture()
+        val all = EkBackup.inspect(original)
+        val expected = all.associate { it.path to it.inventorySlots[0] }
+        assertTrue(runCatching {
+            EkBackup.apply(original, EkBackup.EditPlan(all.map { it.path }.toSet(),
+                slotReplacements = listOf(EkBackup.SlotReplace(0, 5013, 2, expected))))
+        }.isFailure)
+    }
+
+    @Test fun medipacksRemainStackableWithinOneSlotAfterClickingAdd() {
+        val original = fixture()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val inserted = EkBackup.apply(original, EkBackup.EditPlan(
+            all, slotInserts = listOf(EkBackup.SlotInsert(0, 5070, 10))))
+        val increased = EkBackup.apply(inserted, EkBackup.EditPlan(
+            all, slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 10, 25, addQuantity = true))))
+        assertTrue(EkBackup.inspect(increased).all {
+            it.inventorySlots[0].id == 5070 && it.inventorySlots[0].count == 35
+        })
+    }
+
 }
