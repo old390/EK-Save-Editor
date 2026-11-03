@@ -43,14 +43,14 @@ object EkBackup {
         val inventory: Map<Int, Int>,
         val companion: CompanionInfo? = null,
         val inventorySlots: List<InventorySlot> = emptyList(),
-        /** Pontos disponíveis calculados: total por nível + extras − gastos. */
+        /** Calculated available points: earned by level + bonuses − points spent. */
         val freeTraitPoints: Int? = null,
         val characterLevel: Int? = null,
         val spentTraitPoints: Int? = null,
         val freeSkillPoints: Int? = null,
         val spentSkillPoints: Int? = null
     ) {
-        /** Os grupos de saves/0, saves/1, saves/2... são personagens separados. */
+        /** Each saves/0, saves/1, saves/2... folder belongs to a separate character. */
         val characterSlot: Int
             get() = path.substringAfter("saves/").substringBefore('/').toInt()
     }
@@ -63,7 +63,7 @@ object EkBackup {
         val savePaths: Set<String>
     )
 
-    /** A ordem dos personagens é dada pelas pastas, não pelo nome nem pela quantidade de arquivos. */
+    /** Character order comes from save folder IDs, not names or file counts. */
     fun characters(saves: List<SaveInfo>): List<CharacterInfo> =
         saves.groupBy { it.characterSlot }.toSortedMap().map { (slot, group) ->
             val primary = group.firstOrNull { it.path.endsWith("/auto.sav") }
@@ -73,20 +73,20 @@ object EkBackup {
                 primary.characterLevel, group.map { it.path }.toSet())
         }
 
-    /** Item na posição real do inventário, preservando inclusive espaços vazios. */
+    /** Item at an actual inventory slot, preserving empty slots as well. */
     data class InventorySlot(val id: Int, val count: Int)
     data class ItemAdd(val id: Int, val count: Int = 1)
     /**
-     * A cópia selecionada é identificada também pela sua ordem entre
-     * ocorrências do mesmo ID (0 = primeira cópia). Cada save pode ter
-     * a mesma cópia em posição distinta. null preserva chamadas antigas.
+     * Each selected copy is also identified by its order among
+     * occurrences with the same ID (0 = first copy). Each save may have
+     * the same copy at a different position. null maintains backward compatibility.
      */
     data class SlotEdit(
         val index: Int, val expectedId: Int, val expectedCount: Int, val quantity: Int,
         val addQuantity: Boolean = false,
         val occurrence: Int? = null
     )
-    /** Novo item somente no espaço vazio indicado, em TODOS os saves. */
+    /** Insert only into the specified empty slot in ALL selected saves. */
     data class SlotInsert(val index: Int, val itemId: Int, val count: Int)
     /**
      * Substituicao explicitamente confirmada pelo usuario, com imagem
@@ -121,48 +121,48 @@ object EkBackup {
             require(targetPaths.isNotEmpty()) { "Backup sem saves" }
             require(gold != null || traitPoints != null || skillPoints != null || items.isNotEmpty() ||
                 slotEdits.isNotEmpty() || slotInserts.isNotEmpty() || slotReplacements.isNotEmpty() || vaultChange != null || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
-                companionSkillDelta != null || resetCompanionTraits || resetCompanionSkills) { "Nenhuma alteração selecionada" }
-            require(gold == null || gold in 0..999_999_999) { "Ouro fora do intervalo" }
-            require(traitPoints == null || traitPoints in 0..999) { "Atributos fora do intervalo" }
-            require(skillPoints == null || skillPoints in 0..999) { "Habilidades fora do intervalo" }
-            require(listOf(traitPoints != null, traitDelta != null, resetTraits).count { it } <= 1) { "Escolha um tipo de edição de atributos" }
-            require(listOf(skillPoints != null, skillDelta != null, resetSkills).count { it } <= 1) { "Escolha um tipo de edição de habilidades" }
+                companionSkillDelta != null || resetCompanionTraits || resetCompanionSkills) { "No changes selected" }
+            require(gold == null || gold in 0..999_999_999) { "Gold fora do intervalo" }
+            require(traitPoints == null || traitPoints in 0..999) { "Attributes fora do intervalo" }
+            require(skillPoints == null || skillPoints in 0..999) { "Skills fora do intervalo" }
+            require(listOf(traitPoints != null, traitDelta != null, resetTraits).count { it } <= 1) { "Choose only one attribute editing action" }
+            require(listOf(skillPoints != null, skillDelta != null, resetSkills).count { it } <= 1) { "Choose only one skill editing action" }
             require(!(resetCompanionTraits && companionTraitDelta != null)) { "Escolha zerar ou adicionar atributos do companheiro" }
             require(!(resetCompanionSkills && companionSkillDelta != null)) { "Escolha zerar ou adicionar habilidades do companheiro" }
             for (n in listOf(traitDelta, skillDelta, companionTraitDelta, companionSkillDelta)) {
                 require(n == null || n in 1..999) { "Acrescente entre 1 e 999 pontos" }
             }
             for (item in items) {
-                require(item.id in 1..999_999 && item.count in 1..999) { "ID ou quantidade de item inválidos" }
+                require(item.id in 1..999_999 && item.count in 1..999) { "Invalid item ID or quantity" }
             }
             for (edit in slotEdits) {
                 require(edit.index >= 0 && edit.expectedId in 1..999_999 &&
                     edit.expectedCount in 1..999 && edit.quantity in (if (edit.addQuantity) 1..999 else 0..999) &&
                     (edit.occurrence == null || edit.occurrence >= 0)) {
-                    "Edição de item inválida"
+                    "Invalid item edit"
                 }
             }
             for (insert in slotInserts) {
                 require(insert.index >= 0 && insert.itemId in 1..999_999 && insert.count in 1..999) {
-                    "Dados de inserção inválidos"
+                    "Invalid item insertion data"
                 }
             }
             for (replace in slotReplacements) {
                 require(replace.index >= 0 && replace.itemId in 1..999_999 && replace.count in 1..999) {
-                    "Substituição de item inválida"
+                    "Invalid item replacement"
                 }
                 require(replace.expectedByPath.keys == targetPaths) {
-                    "Inventários esperados não correspondem a todos os saves"
+                    "Expected inventory data does not cover all selected saves"
                 }
             }
             vaultChange?.validate(targetPaths)
         }
     }
-    /** Validação independente da interface, permitindo testes de valores vazios e inválidos. */
+    /** UI-independent input validation, including empty and invalid values. */
     fun parseNumberInput(raw: String, label: String, max: Long, min: Long = 0): Long {
         val clean = raw.trim()
         require(clean.isNotEmpty()) { "Digite um valor em '$label' antes de aplicar." }
-        val number = clean.toLongOrNull() ?: throw IllegalArgumentException("Informe um número inteiro válido em '$label'.")
+        val number = clean.toLongOrNull() ?: throw IllegalArgumentException("Enter a valid whole number for '$label'.")
         require(number in min..max) { "$label precisa estar entre $min e $max." }
         return number
     }
@@ -182,7 +182,7 @@ object EkBackup {
     }
     private fun archive(data: ByteArray): List<ArchiveItem> {
         require(data.size in 1..20_000_000 && data.size >= 4 && data[0] == 'P'.code.toByte() && data[1] == 'K'.code.toByte()) {
-            "Arquivo inválido: selecione EK.bak"
+            "Invalid file: select EK.bak"
         }
         val files = mutableListOf<ArchiveItem>()
         val names = mutableSetOf<String>()
@@ -202,10 +202,10 @@ object EkBackup {
         return files
     }
     private fun plain(contents: ByteArray): String = String(Base64.getMimeDecoder().decode(contents), StandardCharsets.UTF_8).also {
-        require(it.contains("\nversion:") && it.contains("\ngamedata: {")) { "Save incompatível" }
+        require(it.contains("\nversion:") && it.contains("\ngamedata: {")) { "Incompatible save format" }
     }
     private fun braceClose(text: String, open: Int): Int {
-        require(open >= 0 && text[open] == '{') { "Bloco incompatível" }
+        require(open >= 0 && text[open] == '{') { "Incompatible save block" }
         var depth = 0
         for (i in open until text.length) {
             when (text[i]) {
@@ -213,31 +213,31 @@ object EkBackup {
                 '}' -> if (--depth == 0) return i
             }
         }
-        error("Bloco incompleto")
+        error("Incomplete save block")
     }
     private fun block(text: String, marker: String, start: Int = 0): IntRange? {
         val index = text.indexOf(marker, start)
         if (index < 0) return null
         val open = text.indexOf('{', index + marker.length - 1)
-        require(open >= 0) { "Bloco incompleto: $marker" }
+        require(open >= 0) { "Incomplete save block: $marker" }
         return open..braceClose(text, open)
     }
     private fun playerBounds(text: String): IntRange {
         val gamedata = text.indexOf("\ngamedata: {")
         require(gamedata >= 0) { "Dados do personagem ausentes" }
-        return block(text, "\n\tplayer: {", gamedata) ?: error("Personagem não encontrado")
+        return block(text, "\n\tplayer: {", gamedata) ?: error("Character not found")
     }
     private fun one(text: String, pattern: Regex, key: String): Int = pattern.find(text)?.groupValues?.get(2)?.toInt()
-        ?: error("Campo $key não encontrado")
+        ?: error("Missing field: $key")
     private fun gold(text: String): Long = goldPattern.find(text)?.groupValues?.get(2)?.toLong()
-        ?: error("Ouro não encontrado")
+        ?: error("Gold field not found")
     private data class TraitBalance(
         val level: Int, val byLevel: Int, val extra: Int, val spent: Int, val free: Int
     )
 
-    /** 4 no primeiro nível, 2 por nível até o 15, e 3 do 16 em diante. */
+    /** 4 points at level 1, 2 per level through 15, and 3 per level from 16 onward. */
     private fun traitPointsFromLevel(level: Int): Int {
-        require(level in 1..999) { "Nível de personagem inválido" }
+        require(level in 1..999) { "Invalid character level" }
         return 4 + (level - 1).coerceAtMost(14) * 2 + (level - 15).coerceAtLeast(0) * 3
     }
 
@@ -248,15 +248,15 @@ object EkBackup {
         val points = raw.split(',').map { it.trim().toIntOrNull() ?: return null }
         if (points.size != 6 || points.any { it < 0 }) return null
         val spent = points.sum()
-        // A ficha de um herói recém-criado pode não ter extraTraitPoints.
+        // A newly created character may not have an extraTraitPoints field.
         val extra = traitPattern.find(player)?.groupValues?.get(2)?.toIntOrNull() ?: 0
         val byLevel = traitPointsFromLevel(level)
         return TraitBalance(level, byLevel, extra, spent, byLevel + extra - spent)
     }
 
     /**
-     * Custos por nível conforme Skill Table da wiki oficial.
-     * Habilidades desconhecidas => saldo real desconhecido, nunca presumido.
+     * Point costs by rank, based on the game wiki's skill table.
+     * Skills desconhecidas => saldo real desconhecido, nunca presumido.
      */
     private val skillCosts: Map<String, List<Int>> = """
         arbenos_might|1,2,3
@@ -370,8 +370,8 @@ object EkBackup {
         if (points.size != 6 || points.any { it < 0 }) return null
         val spent = points.sum()
         val bonus = anyTraitPattern.find(character)?.groupValues?.get(2)?.toIntOrNull() ?: 0
-        // Companheiros não recebem os quatro pontos iniciais do herói.
-        // Exemplo real: Grissenda nível 14, 10 extras e 24 gastos => 14 + 10 - 24 = 0.
+        // Companions do not receive the hero's four starting attribute points.
+        // Example: level-14 Grissenda with 10 bonus and 24 spent has 14 + 10 - 24 = 0 free points.
         val byLevel = level
         return TraitBalance(level, byLevel, bonus, spent, byLevel + bonus - spent)
     }
@@ -379,7 +379,7 @@ object EkBackup {
     /** Insere o campo extra/bonus ausente no bloco correto sem remover os outros. */
     private fun updateBonusField(character: String, regex: Regex, field: String, marker: String, value: Int): String {
         if (regex.containsMatchIn(character)) return replaceNumber(character, regex, value)
-        val range = block(character, marker) ?: error("Bloco $marker ausente no personagem")
+        val range = block(character, marker) ?: error("Missing $marker block in character data")
         val lineBegin = character.lastIndexOf('\n', range.first).let { if (it < 0) 0 else it + 1 }
         val indent = character.substring(lineBegin, range.first).takeWhile { it == '\t' }
         val insertion = "\t$field: $value\n$indent"
@@ -387,7 +387,7 @@ object EkBackup {
     }
 
     private fun numbers(raw: String): MutableList<Int> = raw.split(',').map { it.trim().toInt() }.toMutableList()
-    private fun backpack(text: String): MatchResult = backpackPattern.find(text) ?: error("Inventário não encontrado")
+    private fun backpack(text: String): MatchResult = backpackPattern.find(text) ?: error("Inventory not found")
 
     /** Find immediate brace-objects in an array such as party.companions or gamedata.npcs. */
     private fun arrayObjects(text: String, marker: String, from: Int, until: Int): List<IntRange> {
@@ -402,14 +402,14 @@ object EkBackup {
                 ']' -> return result
                 '{' -> {
                     val close = braceClose(text, pos)
-                    require(close < until) { "Lista de companheiros incompleta" }
+                    require(close < until) { "Incomplete companion list" }
                     result += pos..close
                     pos = close + 1
                 }
                 else -> pos++
             }
         }
-        error("Lista de companheiros incompleta")
+        error("Incomplete companion list")
     }
     private fun activeCompanion(text: String): Pair<String, IntRange>? {
         val party = block(text, "\n\tparty: {") ?: return null
@@ -447,7 +447,7 @@ object EkBackup {
         val pack = backpack(text)
         val ids = numbers(pack.groupValues[2])
         val units = numbers(pack.groupValues[4])
-        require(ids.size == units.size) { "Inventário incompatível" }
+        require(ids.size == units.size) { "Incompatible inventory data" }
         val balance = playerTraitBalance(player)
         val skillsBalance = skillBalance(player, false)
         SaveInfo(
@@ -470,14 +470,14 @@ object EkBackup {
         )
     }.also { require(it.isNotEmpty()) { "Nenhum save reconhecido no EK.bak" } }
 
-    /** Identifica os quatro baús em cada save sem confundi-los com backpack. */
+    /** Identify four Town Hall vaults in each save without confusing them with the backpack. */
     fun inspectVaults(data: ByteArray): Map<String, List<VaultStorage.VaultInfo>> =
         archive(data).filter { savePath.matches(it.entry.name) }.associate { source ->
             source.entry.name to VaultStorage.read(plain(source.contents))
         }
 
     private fun replaceNumber(text: String, pattern: Regex, number: Number): String {
-        val found = pattern.find(text) ?: error("Campo de pontos não encontrado")
+        val found = pattern.find(text) ?: error("Point field not found")
         return text.replaceRange(found.groups[2]!!.range, number.toString())
     }
     private fun increment(current: Int, points: Int?, reset: Boolean, name: String): Int? {
@@ -495,18 +495,18 @@ object EkBackup {
         val skillBonus = anySkillPattern.find(currentParty)?.groupValues?.get(2)?.toIntOrNull() ?: 0
         val trait = if (plan.resetCompanionTraits) {
             val balance = companionTraitBalance(currentParty)
-                ?: error("Gastos do companheiro não identificados: zeramento cancelado")
+                ?: error("Could not determine the companion's spent points. Reset canceled.")
             val newBonus = balance.spent - balance.byLevel
-            require(newBonus in 0..999) { "Não é seguro zerar atributos sem mexer nos pontos gastos" }
+            require(newBonus in 0..999) { "Cannot safely reset attribute points without changing allocated points" }
             newBonus
-        } else increment(traitBonus, plan.companionTraitDelta, false, "Atributos do companheiro")
+        } else increment(traitBonus, plan.companionTraitDelta, false, "Attributes do companheiro")
         val skill = if (plan.resetCompanionSkills) {
             val balance = skillBalance(currentParty, true)
-                ?: error("Habilidades aprendidas não identificadas: zeramento cancelado")
+                ?: error("Could not identify learned companion skills. Reset canceled.")
             val newBonus = balance.spent - balance.byLevel
-            require(newBonus in 0..999) { "Não é seguro zerar habilidades sem remover níveis aprendidos" }
+            require(newBonus in 0..999) { "Cannot safely reset skill points without removing learned skill ranks" }
             newBonus
-        } else increment(skillBonus, plan.companionSkillDelta, false, "Habilidades do companheiro")
+        } else increment(skillBonus, plan.companionSkillDelta, false, "Skills do companheiro")
         val blocks = mutableListOf(partyRange)
         // NPC copy of the active companion is kept consistent with party.companions.
         val gameData = block(text, "\ngamedata: {")
@@ -527,46 +527,46 @@ object EkBackup {
         return changed
     }
     /**
-     * Duplicatas são encontradas pela ORDEM ENTRE CÓPIAS do mesmo ID, não
-     * só por ID/quantidade. A ordem independe de outros objetos intercalados.
-     * Se um outro save tiver menos cópias, retorna null: excluir não apaga
-     * nada nesse save, e adicionar pode criar uma nova cópia se couber.
+     * Duplicates are located by OCCURRENCE ORDER within the same item ID, not
+     * just by ID or stack quantity. Other interleaved items do not affect the order.
+     * If another save has fewer copies, return null: deleting does not remove
+     * anything in that save, while adding may create another copy if space allows.
      */
     private fun locateItem(ids: List<Int>, units: List<Int>, edit: SlotEdit): Int? {
         val sameId = ids.indices.filter { ids[it] == edit.expectedId }
         if (sameId.isEmpty()) return null
         if (edit.occurrence != null) return sameId.getOrNull(edit.occurrence)
-        // Compatibilidade com edições anteriores que não enviavam ocorrência.
+        // Backward compatibility for edits made without an occurrence index.
         if (edit.index in ids.indices && ids[edit.index] == edit.expectedId) return edit.index
         val sameCount = sameId.filter { units[it] == edit.expectedCount }
         if (sameCount.size == 1) return sameCount.single()
         if (sameId.size == 1) return sameId.single()
         require(false) {
-            "Item repetido ID ${edit.expectedId}: selecione novamente a cópia na grade para identificar sua posição."
+            "Duplicate item ID ${edit.expectedId}: select the copy again in the grid to identify its position."
         }
         return null
     }
 
     /**
-     * Item unitário: cada unidade precisa de um espaço independente.
-     * A alocação é transacional; capacidade insuficiente cancela todo o EditPlan.
+     * Non-stackable item: each copy requires its own slot.
+     * Allocation is transactional: insufficient capacity cancels the entire edit plan.
      */
     private fun addSingleCopies(
         ids: MutableList<Int>, units: MutableList<Int>, id: Int, count: Int, path: String,
         firstSlot: Int? = null
     ) {
-        require(!ItemRules.isStackable(id)) { "Item deveria ser empilhável" }
+        require(!ItemRules.isStackable(id)) { "Expected a non-stackable item" }
         val empty = ids.indices.filter { ids[it] == 0 }.toMutableList()
         if (firstSlot != null) {
             require(firstSlot in empty) {
-                "O espaço ${firstSlot + 1} não está vazio em $path"
+                "Slot ${firstSlot + 1} is not empty in $path"
             }
             empty.remove(firstSlot)
             empty.add(0, firstSlot)
         }
         require(empty.size >= count) {
-            "Item unitário exige $count espaços, mas apenas ${empty.size} estão livres em $path. " +
-                "Não coloque várias unidades de tomos ou equipamentos no mesmo espaço."
+            "Non-stackable item requires $count slots, but only ${empty.size} are free in $path. " +
+                "Do not put multiple copies of tomes or equipment into the same slot."
         }
         for (i in empty.take(count)) {
             ids[i] = id
@@ -582,29 +582,29 @@ object EkBackup {
             plan.traitPoints != null -> plan.traitPoints
             plan.resetTraits -> {
                 val progress = playerTraitBalance(player)
-                    ?: error("Nível e pontos gastos indisponíveis: não é seguro zerar atributos.")
+                    ?: error("Level or spent-point data is missing; resetting attributes is unsafe.")
                 val requiredExtra = progress.spent - progress.byLevel
                 require(requiredExtra in 0..999) {
-                    "Este personagem tem pontos do nível ainda livres. Não é possível zerá-los sem alterar pontos já distribuídos."
+                    "This character still has unspent level-up points. They cannot be reset without changing allocated attributes."
                 }
                 requiredExtra
             }
             else -> increment(
                 traitPattern.find(player)?.groupValues?.get(2)?.toIntOrNull() ?: 0,
-                plan.traitDelta, false, "Atributos"
+                plan.traitDelta, false, "Attributes"
             )
         }
         val skillValue = if (plan.skillPoints != null) plan.skillPoints else if (plan.resetSkills) {
             val balance = skillBalance(player, false)
-                ?: error("Não foi possível calcular habilidades aprendidas: zeramento cancelado")
+                ?: error("Could not calculate the costs of learned skills. Reset canceled.")
             val newBonus = balance.spent - balance.byLevel
             require(newBonus in 0..999) {
-                "Não é possível zerar pontos livres sem remover habilidades já aprendidas"
+                "Cannot reset unspent points without removing learned skills"
             }
             newBonus
         } else increment(
             skillPattern.find(player)?.groupValues?.get(2)?.toIntOrNull() ?: 0,
-            plan.skillDelta, false, "Habilidades"
+            plan.skillDelta, false, "Skills"
         )
         if (traitValue != null)
             player = updateBonusField(player, traitPattern, "extraTraitPoints", "traits: {", traitValue)
@@ -616,11 +616,11 @@ object EkBackup {
             val pack = backpack(modified)
             val ids = numbers(pack.groupValues[2])
             val units = numbers(pack.groupValues[4])
-            require(ids.size == units.size) { "Inventário incompatível" }
+            require(ids.size == units.size) { "Incompatible inventory data" }
             for (edit in plan.slotEdits) {
                 val stackable = ItemRules.isStackable(edit.expectedId)
-                // Duplicar item unitário não exige localizar o original:
-                // precisa apenas adicionar N cópias em N espaços vazios.
+                // Duplicating a non-stackable item does not require locating the original:
+                // just add N copies to N empty slots.
                 if (edit.addQuantity && !stackable) {
                     addSingleCopies(ids, units, edit.expectedId, edit.quantity, path)
                     continue
@@ -634,7 +634,7 @@ object EkBackup {
                     } else {
                         val free = ids.indexOf(0)
                         require(free >= 0) {
-                            "Inventário cheio em $path; não há espaço para ID ${edit.expectedId}"
+                            "Inventory full in $path; no free slot for item ID ${edit.expectedId}"
                         }
                         ids[free] = edit.expectedId
                         units[free] = edit.quantity
@@ -654,7 +654,7 @@ object EkBackup {
             }
             for (insert in plan.slotInserts) {
                 require(insert.index in ids.indices && ids[insert.index] == 0) {
-                    "Espaço ${insert.index + 1} ocupado em $path; escolha substituição com confirmação."
+                    "Espaço ${insert.index + 1} is occupied in $path; choose a confirmed replacement."
                 }
                 if (!ItemRules.isStackable(insert.itemId)) {
                     addSingleCopies(ids, units, insert.itemId, insert.count, path, insert.index)
@@ -669,7 +669,7 @@ object EkBackup {
                 } else {
                     val slot = ids.indexOf(id).takeIf { it >= 0 } ?: ids.indexOf(0)
                     require(slot >= 0) {
-                        "Inventário cheio em $path. Escolha um espaço e confirme a substituição."
+                        "Inventory full in $path. Choose a slot and confirm the replacement."
                     }
                     ids[slot] = id
                     units[slot] = count
@@ -678,11 +678,11 @@ object EkBackup {
             for (replacement in plan.slotReplacements) {
                 ItemRules.ensureSlotQuantity(replacement.itemId, replacement.count)
                 val expected = replacement.expectedByPath[path]
-                    ?: error("Save não previsto na confirmação: $path")
-                require(replacement.index in ids.indices) { "Espaço inválido em $path" }
+                    ?: error("Save was not included in the confirmation: $path")
+                require(replacement.index in ids.indices) { "Invalid slot in $path" }
                 val i = replacement.index
                 require(ids[i] == expected.id && units[i] == expected.count) {
-                    "O espaço ${i + 1} mudou em $path desde a confirmação; nenhuma substituição feita."
+                    "Slot ${i + 1} changed in $path since confirmation. Nothing was replaced."
                 }
                 ids[i] = replacement.itemId
                 units[i] = replacement.count
@@ -705,7 +705,7 @@ object EkBackup {
         val selectedSlots = parsedBefore.filter { it.path in plan.targetPaths }
             .map { it.characterSlot }.toSet()
         require(selectedSlots.size == 1) {
-            "Escolha um único personagem antes de alterar os saves"
+            "Select one character before editing any saves"
         }
         val modifiedNames = mutableSetOf<String>()
         val output = ByteArrayOutputStream()
@@ -717,7 +717,7 @@ object EkBackup {
                 }
                 zip.putNextEntry(entry)
                 val content = if (source.entry.name in plan.targetPaths) {
-                    require(savePath.matches(source.entry.name)) { "Caminho inválido" }
+                    require(savePath.matches(source.entry.name)) { "Invalid save path" }
                     modifiedNames += source.entry.name
                     Base64.getEncoder().encode(rewrite(plain(source.contents), plan, source.entry.name).toByteArray(StandardCharsets.UTF_8))
                 } else source.contents
@@ -741,21 +741,21 @@ object EkBackup {
         val after = archive(result)
         require(before.map { it.entry.name } == after.map { it.entry.name }) { "Arquivos ZIP diferentes" }
         for ((a,b) in before.zip(after)) if (a.entry.name !in modifiedNames) {
-            require(a.contents.contentEquals(b.contents)) { "Arquivo não editado foi alterado" }
+            require(a.contents.contentEquals(b.contents)) { "An unselected file was unexpectedly modified" }
         }
         val parsedAfter = inspect(result)
         for (prev in parsedBefore) {
             val now = parsedAfter.single { it.path == prev.path }
-            if (prev.path !in modifiedNames) require(now == prev) { "Save não selecionado modificado" }
+            if (prev.path !in modifiedNames) require(now == prev) { "An unselected save was modified" }
             else {
                 if (plan.gold != null) require(now.gold == plan.gold)
                 if (plan.traitPoints != null) require(now.traitPoints == plan.traitPoints)
                 if (plan.skillPoints != null) require(now.skillPoints == plan.skillPoints)
                 if (plan.resetTraits) require(now.freeTraitPoints == 0) {
-                    "Não foi possível zerar os pontos livres em ${prev.path}"
+                    "Could not reset unspent points in ${prev.path}"
                 }
                 if (plan.resetSkills) require(now.freeSkillPoints == 0) {
-                    "Pontos livres de habilidades não foram zerados em ${prev.path}"
+                    "Unspent skill points were not reset in ${prev.path}"
                 }
                 if (plan.traitDelta != null) {
                     require(now.traitPoints == prev.traitPoints + plan.traitDelta) {
@@ -763,7 +763,7 @@ object EkBackup {
                     }
                     if (prev.freeTraitPoints != null) {
                         require(now.freeTraitPoints == prev.freeTraitPoints + plan.traitDelta) {
-                            "O saldo real não aumentou como esperado em ${prev.path}"
+                            "Available points did not increase as expected in ${prev.path}"
                         }
                         require(now.spentTraitPoints == prev.spentTraitPoints) {
                             "Os pontos gastos foram alterados inesperadamente"
@@ -773,7 +773,7 @@ object EkBackup {
                 if (plan.skillDelta != null) {
                     require(now.skillPoints == prev.skillPoints + plan.skillDelta)
                     if (prev.freeSkillPoints != null) require(now.freeSkillPoints == prev.freeSkillPoints + plan.skillDelta) {
-                        "Habilidades livres não aumentaram em ${prev.path}"
+                        "Available skill points did not increase in ${prev.path}"
                     }
                 }
                 if (plan.resetCompanionTraits && prev.companion != null)
@@ -793,8 +793,8 @@ object EkBackup {
                 for (edit in plan.slotEdits) {
                     val originalIds = prev.inventorySlots.map { it.id }
                     val originalCounts = prev.inventorySlots.map { it.count }
-                    // +N cópias de itens unitários não depende de escolher
-                    // um stack original, evitando ambiguidades de ID repetido.
+                    // +N copies of non-stackable items do not depend on selecting
+                    // an original stack, avoiding ambiguity between duplicate IDs.
                     val oldIndex = if (edit.addQuantity && !ItemRules.isStackable(edit.expectedId))
                         null else locateItem(originalIds, originalCounts, edit)
                     val oldCount = oldIndex?.let { prev.inventorySlots[it].count } ?: 0
@@ -809,7 +809,7 @@ object EkBackup {
                     require(newTotal == expectedTotal) {
                         "Quantidade do ID ${edit.expectedId} divergiu em ${prev.path}"
                     }
-                    // Sem substituição explícita, nenhum outro ID pode desaparecer.
+                    // Without an explicit replacement, no other item ID may disappear.
                     for ((id, amount) in prev.inventory) if (id != edit.expectedId) {
                         require(now.inventory[id] == amount) {
                             "Outro item foi alterado inesperadamente em ${prev.path}"
@@ -822,27 +822,27 @@ object EkBackup {
                     val perSlot = ItemRules.maxPerSlot(insert.itemId)
                     require(original?.id == 0 && current?.id == insert.itemId &&
                         current.count == if (perSlot == 1) 1 else insert.count) {
-                        "Novo item não foi gravado corretamente no espaço ${insert.index + 1}"
+                        "The new item was not written correctly to slot ${insert.index + 1}"
                     }
                     val previousTotal = prev.inventory[insert.itemId] ?: 0
                     val newTotal = now.inventory[insert.itemId] ?: 0
                     require(newTotal == previousTotal + insert.count) {
-                        "Quantidade inserida não corresponde aos espaços gravados"
+                        "Inserted item quantity does not match the recorded slots"
                     }
                 }
                 for (replacement in plan.slotReplacements) {
                     val expected = replacement.expectedByPath[prev.path]
-                        ?: error("Sem confirmação para ${prev.path}")
+                        ?: error("No confirmation for ${prev.path}")
                     require(prev.inventorySlots.getOrNull(replacement.index) == expected) {
-                        "Os inventários mudaram desde a confirmação"
+                        "Inventories changed since confirmation"
                     }
                     val targetSlot = now.inventorySlots.getOrNull(replacement.index)
                     require(targetSlot?.id == replacement.itemId && targetSlot.count == replacement.count) {
-                        "Substituição não foi gravada em ${prev.path}"
+                        "Replacement was not saved in ${prev.path}"
                     }
                     prev.inventorySlots.indices.filter { it != replacement.index }.forEach { i ->
                         require(prev.inventorySlots[i] == now.inventorySlots[i]) {
-                            "Outra posição foi alterada inesperadamente em ${prev.path}"
+                            "Another slot was unexpectedly modified in ${prev.path}"
                         }
                     }
                 }
@@ -850,7 +850,7 @@ object EkBackup {
                     val count = now.inventory[item.id] ?: 0
                     val expected = if (ItemRules.isStackable(item.id)) item.count
                         else (prev.inventory[item.id] ?: 0) + item.count
-                    require(count == expected) { "Item não aplicado corretamente no save ${prev.path}" }
+                    require(count == expected) { "Item was not correctly applied to save ${prev.path}" }
                 }
             }
         }
