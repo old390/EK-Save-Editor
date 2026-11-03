@@ -1,29 +1,36 @@
-name: Compilar e testar EK Save Editor
+name: Build, test, and release EK Save Editor
+
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/bootstrap.yml'
       - 'app/**'
+      - 'RELEASE_NOTES.md'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verificar arquivos do editor
+
+      - name: Verify Android project files
         run: |
           test -f app/src/main/java/com/ekeditor/app/MainActivity.kt
           test -f app/src/main/java/com/ekeditor/app/EkBackup.kt
+          test -f app/src/main/java/com/ekeditor/app/VaultStorage.kt
+          test -f app/src/main/java/com/ekeditor/app/ItemRules.kt
           test -f app/build.gradle.kts
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Instalar ferramentas Android SDK
+
+      - name: Install Android SDK
         shell: bash
         run: |
           set -euo pipefail
@@ -37,14 +44,40 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Executar testes e compilar APK
+
+      - name: Run unit tests and build Android APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
-      - name: Publicar APK para download
+
+      - name: Upload APK build artifact
         uses: actions/upload-artifact@v4
         with:
           name: EKSaveEditor-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish v0.8.0 GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts)
+          if [[ "$VERSION" != "0.8.0" ]]; then
+            echo "Current version is $VERSION; v0.8.0 release step skipped."
+            exit 0
+          fi
+          TAG="v$VERSION"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Keeping existing published assets."
+          else
+            gh release create "$TAG" "$APK#EK-Save-Editor-v0.8.0-debug.apk" \
+              --target "$GITHUB_SHA" \
+              --title "EK Save Editor v0.8.0 - US English" \
+              --notes-file RELEASE_NOTES.md
+          fi
