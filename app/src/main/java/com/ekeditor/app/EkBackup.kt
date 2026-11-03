@@ -42,21 +42,24 @@ object EkBackup {
         val traitDelta: Int? = null,
         val skillDelta: Int? = null,
         val resetTraits: Boolean = false,
+        val resetSkills: Boolean = false,
         val companionTraitDelta: Int? = null,
         val companionSkillDelta: Int? = null,
-        val resetCompanionTraits: Boolean = false
+        val resetCompanionTraits: Boolean = false,
+        val resetCompanionSkills: Boolean = false
     ) {
         fun validate() {
             require(targetPaths.isNotEmpty()) { "Backup sem saves" }
             require(gold != null || traitPoints != null || skillPoints != null || items.isNotEmpty() ||
-                traitDelta != null || skillDelta != null || resetTraits || companionTraitDelta != null ||
-                companionSkillDelta != null || resetCompanionTraits) { "Nenhuma alteração selecionada" }
+                traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
+                companionSkillDelta != null || resetCompanionTraits || resetCompanionSkills) { "Nenhuma alteração selecionada" }
             require(gold == null || gold in 0..999_999_999) { "Ouro fora do intervalo" }
             require(traitPoints == null || traitPoints in 0..999) { "Atributos fora do intervalo" }
             require(skillPoints == null || skillPoints in 0..999) { "Habilidades fora do intervalo" }
             require(listOf(traitPoints != null, traitDelta != null, resetTraits).count { it } <= 1) { "Escolha um tipo de edição de atributos" }
-            require(listOf(skillPoints != null, skillDelta != null).count { it } <= 1) { "Escolha um tipo de edição de habilidades" }
-            require(!(resetCompanionTraits && companionTraitDelta != null)) { "Escolha zerar ou adicionar pontos do companheiro" }
+            require(listOf(skillPoints != null, skillDelta != null, resetSkills).count { it } <= 1) { "Escolha um tipo de edição de habilidades" }
+            require(!(resetCompanionTraits && companionTraitDelta != null)) { "Escolha zerar ou adicionar atributos do companheiro" }
+            require(!(resetCompanionSkills && companionSkillDelta != null)) { "Escolha zerar ou adicionar habilidades do companheiro" }
             for (n in listOf(traitDelta, skillDelta, companionTraitDelta, companionSkillDelta)) {
                 require(n == null || n in 1..999) { "Acrescente entre 1 e 999 pontos" }
             }
@@ -65,6 +68,15 @@ object EkBackup {
             }
         }
     }
+    /** Validação independente da interface, permitindo testes de valores vazios e inválidos. */
+    fun parseNumberInput(raw: String, label: String, max: Long, min: Long = 0): Long {
+        val clean = raw.trim()
+        require(clean.isNotEmpty()) { "Digite um valor em '$label' antes de aplicar." }
+        val number = clean.toLongOrNull() ?: throw IllegalArgumentException("Informe um número inteiro válido em '$label'.")
+        require(number in min..max) { "$label precisa estar entre $min e $max." }
+        return number
+    }
+
     private data class ArchiveItem(val entry: ZipEntry, val contents: ByteArray)
 
     private fun readLimited(input: InputStream, max: Int): ByteArray {
@@ -210,13 +222,13 @@ object EkBackup {
         return result.toInt()
     }
     private fun rewriteCompanion(text: String, plan: EditPlan): String {
-        if (plan.companionTraitDelta == null && plan.companionSkillDelta == null && !plan.resetCompanionTraits) return text
+        if (plan.companionTraitDelta == null && plan.companionSkillDelta == null && !plan.resetCompanionTraits && !plan.resetCompanionSkills) return text
         val (active, partyRange) = activeCompanion(text) ?: return text // other saves may lack an active companion
         val currentParty = text.substring(partyRange)
         val trait = increment(one(currentParty, anyTraitPattern, "atributos do companheiro"),
             plan.companionTraitDelta, plan.resetCompanionTraits, "Atributos do companheiro")
         val skill = increment(one(currentParty, anySkillPattern, "habilidades do companheiro"),
-            plan.companionSkillDelta, false, "Habilidades do companheiro")
+            plan.companionSkillDelta, plan.resetCompanionSkills, "Habilidades do companheiro")
         val blocks = mutableListOf(partyRange)
         // NPC copy of the active companion is kept consistent with party.companions.
         val gameData = block(text, "\ngamedata: {")
@@ -243,7 +255,7 @@ object EkBackup {
         val traitValue = if (plan.traitPoints != null) plan.traitPoints else
             increment(one(player, traitPattern, "atributos"), plan.traitDelta, plan.resetTraits, "Atributos")
         val skillValue = if (plan.skillPoints != null) plan.skillPoints else
-            increment(one(player, skillPattern, "habilidades"), plan.skillDelta, false, "Habilidades")
+            increment(one(player, skillPattern, "habilidades"), plan.skillDelta, plan.resetSkills, "Habilidades")
         if (traitValue != null) player = replaceNumber(player, traitPattern, traitValue)
         if (skillValue != null) player = replaceNumber(player, skillPattern, skillValue)
         var modified = text.replaceRange(playerRange.first, playerRange.last + 1, player)
@@ -305,9 +317,11 @@ object EkBackup {
                 if (plan.traitPoints != null) require(now.traitPoints == plan.traitPoints)
                 if (plan.skillPoints != null) require(now.skillPoints == plan.skillPoints)
                 if (plan.resetTraits) require(now.traitPoints == 0)
+                if (plan.resetSkills) require(now.skillPoints == 0)
                 if (plan.traitDelta != null) require(now.traitPoints == prev.traitPoints + plan.traitDelta)
                 if (plan.skillDelta != null) require(now.skillPoints == prev.skillPoints + plan.skillDelta)
                 if (plan.resetCompanionTraits && prev.companion != null) require(now.companion?.traitPoints == 0)
+                if (plan.resetCompanionSkills && prev.companion != null) require(now.companion?.skillPoints == 0)
                 if (plan.companionTraitDelta != null && prev.companion != null)
                     require(now.companion?.traitPoints == prev.companion.traitPoints + plan.companionTraitDelta)
                 if (plan.companionSkillDelta != null && prev.companion != null)
