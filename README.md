@@ -1,64 +1,91 @@
-# EK Save Editor v0.7.0 — feito por old390
+# EK Save Editor — v0.8.0 (US English)
 
-Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Não afiliado aos criadores do jogo.
+**An independent Android save editor for *Exiled Kingdoms*, created by [old390](https://github.com/old390).**
 
-## Uso
+Edit and restore `EK.bak` backups without root, Shizuku, or a computer. The interface, dialogs, validation messages, and documentation are in **American English (en-US)**.
 
-1. Crie um **backup atualizado dentro do jogo**. Preserve uma cópia original antes de editar.
-2. Importe `EK.bak` pelo seletor de arquivos do Android. Não requer root nem Shizuku.
-3. No inventário visual, toque num item para **somar quantidade**, **definir quantidade**, **excluir um stack** ou **substituir o item**. Toque num **espaço vazio** para buscar um item e inseri-lo. Se o mesmo espaço estiver ocupado em outro save, o editor mostra quais itens serão substituídos e pede sua confirmação. Também é possível escolher uma posição quando a adição pelo painel encontrar algum save com inventário cheio.
-4. Some pontos de ouro, atributos ou habilidades do personagem principal e do companheiro ativo. A correção v0.5.1 reconhece que o companheiro não recebe quatro pontos iniciais: por exemplo, no nível 14, com 10 extras e 24 gastos, há 0 livres; após somar 10, há 10 livres. Os saldos reais são calculados pelo nível, extras recebidos e gastos. O custo das habilidades é consultado em uma tabela de 76 entradas derivada da wiki oficial. Habilidades não catalogadas mostram saldo indisponível, sem inventar um valor.
-5. Use **Conferir valores de todos os saves**. Cada modificação aplica-se a todos os saves presentes no `EK.bak`.
-6. Exporte o `EK.bak` modificado. Copie-o para `/storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak` e **restaure o backup pelo menu do próprio jogo**.
+> **Important:** Back up your original `EK.bak` before making any changes. This app is not affiliated with, endorsed by, or maintained by the developers of *Exiled Kingdoms*.
 
-**Importante:** o editor altera o arquivo de backup; não edita os saves ativos diretamente. Confirme o nome exato `EK.bak` ao copiar para a pasta do jogo.
+## Download and install
 
-## Segurança e limitações
+Download the APK from [GitHub Releases](https://github.com/old390/EK-Save-Editor/releases). If a release is not available yet, use the latest successful [GitHub Actions](https://github.com/old390/EK-Save-Editor/actions) run and download the `EKSaveEditor-debug-apk` artifact ZIP. Extract `app-debug.apk` and install it on your Android phone.
 
-- Alterações são transacionais: se um save tiver inventário incompatível ou pontuação fora do intervalo, nenhum dos saves é alterado naquele comando.
-- Excluir item remove o stack encontrado sem deslocar os demais itens. Quantidade é definida por stack e pode não ser válida para itens não empilháveis.
-- Os botões de zeramento preservam pontos já distribuídos e habilidades aprendidas. Quando o saldo livre não puder ser zerado sem interferir nos pontos gastos ou a habilidade for desconhecida, a operação será recusada.
-- A grade representa **um save de referência** com ícones simbólicos (não as imagens originais do jogo), mas cada mudança é validada em todos os saves.
-- Algumas habilidades ou dados de mods podem ter custos diferentes dos da wiki; verifique no jogo.
-- A versão de Android foi compilada e testada automaticamente, mas ainda requer validação da restauração num dispositivo real.
+**Build type:** The provided APK is a debug-signed build intended for community use and testing. Android may require you to allow installation from your file manager or browser. Keep your original save until you have confirmed a successful restore in the game.
 
-## Referências
+## Features
 
-- Progressão: https://www.exiledkingdoms.com/wiki/index.php/Level
-- Custo dos níveis de habilidades: https://www.exiledkingdoms.com/wiki/index.php?title=Skill_Table
-- Catálogo comunitário de itens (2021): https://steamcommunity.com/app/788270/discussions/0/2515771867786715062/
+| Feature | Description |
+| --- | --- |
+| Multiple characters | Discover up to 10 game character slots dynamically and select the character you want to edit |
+| Character isolation | Each change affects only the selected character's save files, leaving other characters untouched |
+| Gold | Set the amount of gold |
+| Attribute points | View actual unspent points, add points, or safely reset unspent points |
+| Skill points | View unspent points based on skill costs, add points, or safely reset them |
+| Active companion | Edit the active companion's available attribute and skill points |
+| Visual inventory | Tap item slots to add copies, set stack quantities, delete copies, or replace items |
+| Item catalog | Search by item name or numeric ID; catalog is available offline |
+| Non-stackable items | Tomes and equipment are limited to one copy per slot and shown in red |
+| Town Hall vaults | Choose Vault 1–4, view their 20-slot grids, manage contents, and unlock vaults |
+| Save verification | Validate edited saves and preserve unrelated characters, items, and files |
+| Export | Save an updated `EK.bak` and restore it through the game |
 
-## Compilação e testes
+### How to use
 
-Android SDK 35, JDK 17, Gradle 8.9. O GitHub Actions executa testes unitários e `:app:assembleDebug` e publica `app-debug.apk` como artefato.
+1. In *Exiled Kingdoms*, create a **fresh backup**. Keep an unmodified copy somewhere safe.
+2. Open **EK Save Editor** and tap **Select EK.bak**.
+3. If the backup has multiple characters, use **Choose Character** and select one. The editor lists only the characters present in the backup; missing character slots are not invented.
+4. Edit gold, attributes, skills, companion stats, or items. Inventory and vault grids are interactive: tap an occupied slot for actions, or an empty slot to insert an item.
+5. Use **Review All Saves for This Character** to inspect the edited values. You can switch to another character and edit their saves in the same session.
+6. Tap **Export Edited EK.bak**. Then copy the edited file to:
 
-Criado por old390: https://github.com/old390/EK-Save-Editor
+   ```text
+   /storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak
+   ```
 
-## Correção 0.5.2 — inventários divergentes
+7. Open *Exiled Kingdoms* and select **RESTORE BACKUP**. Check that the final filename is exactly `EK.bak`; some Android file managers add suffixes such as `(1)`.
 
-- O save exibido na grade é apenas uma referência. Outros saves podem ter posições e itens diferentes. Por isso, a falta de espaço em **um único** save bloqueava a inserção em todos.
-- Somar, definir ou excluir por ID procura o item em cada save. Se ele estiver ausente, uma edição que adiciona quantidades procura uma posição livre; a exclusão não mexe nesse save. Se não houver espaço, o editor explica qual save está cheio.
-- Para **substituir** itens em um slot, o app exibe o conteúdo daquela posição **em cada save** e solicita confirmação. Nenhum item é sobrescrito silenciosamente. A troca é validada contra o estado que foi mostrado antes de escrever.
-- Antes de restaurar o backup, preserve uma cópia do arquivo original. Uma substituição explicitamente confirmada pode remover itens diferentes em cada save.
+**The app modifies a backup file, not the game's active saves.** Changes only take effect after you restore the edited backup in the game.
 
-## v0.6.0 — Baús da Prefeitura
+## Safety and limitations
 
-- Uma seção própria abaixo do inventário com um menu para escolher **Baú 1, Baú 2, Baú 3 ou Baú 4**; o conteúdo é mostrado em uma grade de 20 espaços.
-- Leitura independente de `worldContainers: vault, vault2, vault3, vault4` e dos campos `hasVault, hasVault2, hasVault3, hasVault4`, sem confundir baús e mochila.
-- Toque no item para acrescentar unidades ou cópias, definir a quantidade de um item empilhável, excluir uma ocorrência específica ou substituí-lo; toque no espaço vazio para selecionar um item no catálogo.
-- Os **quatro saves** são editados, com validação de que os outros baús e a mochila não foram afetados. Itens não empilháveis exigem um espaço por unidade.
-- Se a posição estiver ocupada em outro save, o aplicativo mostra o conteúdo de **cada save** e só substitui mediante confirmação. Editar um baú cheio sem espaços vazios exige substituição consciente.
-- O botão **Desbloquear baú** ativa o indicador daquele baú nos saves, sem pagar ouro no jogo. É uma operação separada e confirmada.
-- Mantenha o `EK.bak` original seguro. O estado dos baús no jogo só muda depois de exportar e restaurar o backup modificado.
+- **Character-aware editing:** A backup may contain multiple characters under `saves/0/`, `saves/1/`, `saves/2/`, etc. The editor groups them by folder and changes only the saves belonging to the selected character. Unselected character data and global files are retained.
+- **Inventory differences:** Auto-saves and manual saves may have different inventory contents or slot positions. When a replacement would overwrite an item, the app shows what occupies that slot in each selected save and asks for confirmation.
+- **Non-stackable items:** A new tome or piece of equipment uses one slot per copy. Items with unknown stacking behavior are conservatively treated as non-stackable to reduce the risk of corrupting the backup.
+- **Available point totals:** The editor calculates attribute and skill points using level progress, recorded bonuses, and spent points. Unknown or modded skill costs may prevent a safe reset.
+- **Town Hall vaults:** Each character's `vault`, `vault2`, `vault3`, and `vault4` containers are managed independently when present. A newly created character may not yet have vault data; the editor does not manufacture missing containers.
+- **Unlocking vaults:** The vault unlock option sets the selected character's vault flags in the backup without charging gold. It is a save edit, not an in-game purchase.
+- **Transactional behavior:** If an edit cannot be validated for the selected character's saves, the editor reports the issue instead of applying partial changes.
+- **Visual icons:** Item grid icons are symbolic category indicators, not the original game's item artwork.
+- **No warranty:** Save formats, mods, or future game updates may differ. Always verify changes in-game before overwriting your original backup.
 
-## v0.7.0 — Suporte a múltiplos personagens
+## Build from source
 
-- Analisa as pastas `saves/<id>/` em vez de presumir que só existe o primeiro personagem.
-- Mostra o menu **Escolher personagem** após importar o arquivo. Exibe nome, classe, nível e número de saves do personagem.
-- No exemplo real `EK(4).bak`, há **Arthur da Cruz** (clérigo nível 17, pasta `saves/0`, 4 saves) e **Shep Sossar** (guerreiro nível 1, pasta `saves/2`, 3 saves).
-- A edição passa a atingir **somente a pasta do personagem escolhido**, preservando integralmente os outros saves, arquivos de mapa e dados globais.
-- Personagens novos podem não ter os campos `extraTraitPoints` e `bonusPoints`: o editor os interpreta como zero e cria os campos somente ao adicionar pontos pela primeira vez.
-- Cada personagem tem seu próprio inventário e seus próprios baús. Quando um personagem ainda não tiver `worldContainers`, a seção de baús aparece como indisponível, sem criar estruturas novas automaticamente.
-- É possível alternar de personagem antes de exportar o mesmo `EK.bak` e preservar todas as alterações de ambos. O personagem selecionado também é mantido após a recriação da interface.
+The repository includes Android source code and a GitHub Actions workflow for automatic unit tests and debug APK builds.
 
-**Segurança:** preserve uma cópia do `EK.bak` original e teste a restauração no jogo antes de considerar esta versão definitiva.
+- Java: 17 (Temurin)
+- Android SDK: API 35
+- Gradle: 8.9
+- CI tasks: `:app:testDebugUnitTest :app:assembleDebug`
+- Output: `app/build/outputs/apk/debug/app-debug.apk`
+
+The CI artifact is automatically published after the tests and build succeed.
+
+## Version history
+
+**v0.8.0 — US English:** Complete translation of the user interface, dialogs, error messages, code documentation, and README. No change to save-file structure or item IDs.
+
+**v0.7.0 — Multiple characters:** Character selector, character-specific editing, and recognition of saves without bonus point fields.
+
+**v0.6.0 — Town Hall vaults:** Four selectable storage vaults, slot editing, and unlock support.
+
+**v0.5.x — Inventory and points:** Interactive inventory grids, non-stackable item rules, duplicate-item handling, and companion point fixes.
+
+## Credits and references
+
+Created by **old390**. Independent community project.
+
+- [Exiled Kingdoms community wiki — Level](https://www.exiledkingdoms.com/wiki/index.php/Level)
+- [Exiled Kingdoms community wiki — Skill Table](https://www.exiledkingdoms.com/wiki/index.php?title=Skill_Table)
+- [Community item catalog discussion](https://steamcommunity.com/app/788270/discussions/0/2515771867786715062/)
+
+Please report problems through the repository's **Issues** tab. When reporting a bug, describe the steps to reproduce it; do not post personal save files publicly.
