@@ -53,11 +53,15 @@ object EkBackup {
     /** Item na posição real do inventário, preservando inclusive espaços vazios. */
     data class InventorySlot(val id: Int, val count: Int)
     data class ItemAdd(val id: Int, val count: Int = 1)
-    /** Um stack por ação. Confere o ID em todos os saves antes de substituir. */
+    /**
+     * A cópia selecionada é identificada também pela sua ordem entre
+     * ocorrências do mesmo ID (0 = primeira cópia). Cada save pode ter
+     * a mesma cópia em posição distinta. null preserva chamadas antigas.
+     */
     data class SlotEdit(
         val index: Int, val expectedId: Int, val expectedCount: Int, val quantity: Int,
-        /** True soma quantidade a cada save, preservando os valores individuais. */
-        val addQuantity: Boolean = false
+        val addQuantity: Boolean = false,
+        val occurrence: Int? = null
     )
     /** Novo item somente no espaço vazio indicado, em TODOS os saves. */
     data class SlotInsert(val index: Int, val itemId: Int, val count: Int)
@@ -109,7 +113,8 @@ object EkBackup {
             }
             for (edit in slotEdits) {
                 require(edit.index >= 0 && edit.expectedId in 1..999_999 &&
-                    edit.expectedCount in 1..999 && edit.quantity in (if (edit.addQuantity) 1..999 else 0..999)) {
+                    edit.expectedCount in 1..999 && edit.quantity in (if (edit.addQuantity) 1..999 else 0..999) &&
+                    (edit.occurrence == null || edit.occurrence >= 0)) {
                     "Edição de item inválida"
                 }
             }
@@ -489,17 +494,25 @@ object EkBackup {
         }
         return changed
     }
-    /** Localiza um item pelo ID, inclusive quando ocupa outra posição em outro save. */
+    /**
+     * Duplicatas são encontradas pela ORDEM ENTRE CÓPIAS do mesmo ID, não
+     * só por ID/quantidade. A ordem independe de outros objetos intercalados.
+     * Se um outro save tiver menos cópias, retorna null: excluir não apaga
+     * nada nesse save, e adicionar pode criar uma nova cópia se couber.
+     */
     private fun locateItem(ids: List<Int>, units: List<Int>, edit: SlotEdit): Int? {
-        if (edit.index in ids.indices && ids[edit.index] == edit.expectedId) return edit.index
         val sameId = ids.indices.filter { ids[it] == edit.expectedId }
         if (sameId.isEmpty()) return null
-        val sameQuantity = sameId.filter { units[it] == edit.expectedCount }
-        val candidates = if (sameQuantity.isNotEmpty()) sameQuantity else sameId
-        require(candidates.size == 1) {
-            "Existem stacks repetidos do item ID ${edit.expectedId} neste save; escolha uma operação sem ambiguidade."
+        if (edit.occurrence != null) return sameId.getOrNull(edit.occurrence)
+        // Compatibilidade com edições anteriores que não enviavam ocorrência.
+        if (edit.index in ids.indices && ids[edit.index] == edit.expectedId) return edit.index
+        val sameCount = sameId.filter { units[it] == edit.expectedCount }
+        if (sameCount.size == 1) return sameCount.single()
+        if (sameId.size == 1) return sameId.single()
+        require(false) {
+            "Item repetido ID ${edit.expectedId}: selecione novamente a cópia na grade para identificar sua posição."
         }
-        return candidates.single()
+        return null
     }
 
     /**
@@ -565,12 +578,15 @@ object EkBackup {
             val units = numbers(pack.groupValues[4])
             require(ids.size == units.size) { "Inventário incompatível" }
             for (edit in plan.slotEdits) {
-                val index = locateItem(ids, units, edit)
                 val stackable = ItemRules.isStackable(edit.expectedId)
+                // Duplicar item unitário não exige localizar o original:
+                // precisa apenas adicionar N cópias em N espaços vazios.
                 if (edit.addQuantity && !stackable) {
-                    // +N em itens unitários cria N espaços de 1 unidade cada.
                     addSingleCopies(ids, units, edit.expectedId, edit.quantity, path)
-                } else if (index == null) {
+                    continue
+                }
+                val index = locateItem(ids, units, edit)
+                if (index == null) {
                     if (edit.quantity == 0) continue
                     if (!stackable) {
                         ItemRules.ensureSlotQuantity(edit.expectedId, edit.quantity)
@@ -718,7 +734,10 @@ object EkBackup {
                 for (edit in plan.slotEdits) {
                     val originalIds = prev.inventorySlots.map { it.id }
                     val originalCounts = prev.inventorySlots.map { it.count }
-                    val oldIndex = locateItem(originalIds, originalCounts, edit)
+                    // +N cópias de itens unitários não depende de escolher
+                    // um stack original, evitando ambiguidades de ID repetido.
+                    val oldIndex = if (edit.addQuantity && !ItemRules.isStackable(edit.expectedId))
+                        null else locateItem(originalIds, originalCounts, edit)
                     val oldCount = oldIndex?.let { prev.inventorySlots[it].count } ?: 0
                     val oldTotal = prev.inventory[edit.expectedId] ?: 0
                     val newTotal = now.inventory[edit.expectedId] ?: 0
