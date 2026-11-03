@@ -223,7 +223,7 @@ class EkBackupTest {
 
     @Test fun blankAndInvalidNumberInputsReturnReadableErrors() {
         for (raw in listOf("", "   ", "abc", "999999999999999999999999", "-2")) {
-            val failure = runCatching { EkBackup.parseNumberInput(raw, "Ouro", 999_999_999) }.exceptionOrNull()
+            val failure = runCatching { EkBackup.parseNumberInput(raw, "Gold", 999_999_999) }.exceptionOrNull()
             assertTrue("Deveria rejeitar '$raw' sem travar", failure is IllegalArgumentException)
             assertTrue(failure?.message?.isNotBlank() == true)
         }
@@ -637,8 +637,8 @@ class EkBackupTest {
                 items = listOf(EkBackup.ItemAdd(750, 1))))
         }
         assertTrue(result.isFailure)
-        assertTrue(result.exceptionOrNull()?.message?.contains("espaços") == true ||
-            result.exceptionOrNull()?.message?.contains("Inventário cheio") == true)
+        assertTrue(result.exceptionOrNull()?.message?.contains("slots") == true ||
+            result.exceptionOrNull()?.message?.contains("Inventory full") == true)
     }
 
     @Test fun fullInventoryRequiresExplicitReplacementAndPreservesOtherSlots() {
@@ -709,7 +709,7 @@ class EkBackupTest {
 
     @Test fun tomeAndEquipmentAreUnitaryWhileMedipackIsStackable() {
         for (id in listOf(5013, 5035, 10001, 554, 750, 450)) {
-            assertTrue("Item $id deveria ocupar apenas uma unidade por espaço", !ItemRules.isStackable(id))
+            assertTrue("Item $id must allow only one unit per slot", !ItemRules.isStackable(id))
             assertEquals(1, ItemRules.maxPerSlot(id))
             assertTrue(runCatching { ItemRules.ensureSlotQuantity(id, 2) }.isFailure)
         }
@@ -1150,7 +1150,7 @@ class EkBackupTest {
         val after = entries(updated)
         assertEquals(before.keys, after.keys)
         for ((path, bytes) in before) if (path !in selected) {
-            assertTrue("O arquivo $path não deveria ser alterado", bytes.contentEquals(after.getValue(path)))
+            assertTrue("File $path must not be modified", bytes.contentEquals(after.getValue(path)))
         }
         assertEquals(3, selected.size)
         val readback = EkBackup.inspect(updated)
@@ -1184,7 +1184,7 @@ class EkBackupTest {
             EkBackup.apply(original, EkBackup.EditPlan(all, gold = 9999L))
         }
         assertTrue(failure.isFailure)
-        assertTrue(failure.exceptionOrNull()?.message?.contains("único personagem") == true)
+        assertTrue(failure.exceptionOrNull()?.message?.contains("one character") == true)
     }
 
     @Test fun newlyCreatedCharacterSupportsItemInsertionWithMissingBonusFields() {
