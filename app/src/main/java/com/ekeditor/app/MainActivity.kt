@@ -172,7 +172,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.4.3", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.5.0", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -194,7 +194,7 @@ class MainActivity : Activity() {
         inventory.addView(itemsCurrent, margin(0, 7))
         inventoryGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         inventory.addView(inventoryGrid, margin(1, 5))
-        inventory.addView(text("Ícones simbólicos de categorias, não imagens oficiais do jogo. Toque em um espaço ocupado para ver o nome completo do item.", 11f, MUTED), margin(4, 12))
+        inventory.addView(text("Ícones simbólicos de categorias. Toque em um item ocupado para alterar a quantidade ou excluí-lo de todos os saves. A edição será bloqueada se houver risco de modificar um item diferente.", 11f, MUTED), margin(4, 12))
         inventory.addView(text("Adicionar item do catálogo", 13f, GOLD, true))
         itemSelectionLabel = text("Nenhum item selecionado", 13f, TEXT)
         inventory.addView(itemSelectionLabel, margin(7, 3))
@@ -247,8 +247,8 @@ class MainActivity : Activity() {
         })
         body.addView(attributes, margin(0, 12))
 
-        val skills = section("✨  Habilidades", "Soma o bônus de habilidades armazenado no save. O saldo livre real depende também das habilidades aprendidas.")
-        skillCurrent = text("Bônus de habilidades no arquivo: —", 14f, TEXT, true)
+        val skills = section("✨  Habilidades", "Saldo real = pontos recebidos por nível + bônus − custo de cada habilidade aprendida. Somar acrescenta ao saldo real sem apagar habilidades.")
+        skillCurrent = text("Habilidades livres atuais: —", 14f, TEXT, true)
         skillDeltaInput = number("Pontos para adicionar", "10")
         skills.addView(skillCurrent)
         skills.addView(skillDeltaInput, margin(8, 5))
@@ -263,10 +263,10 @@ class MainActivity : Activity() {
         })
         body.addView(skills, margin(0, 12))
 
-        companionCard = section("🛡️  Companheiro ativo", "Só são mostrados os atributos e habilidades do companheiro ativo. Aplicar soma pontos em todos os saves em que ele estiver ativo.")
+        companionCard = section("🛡️  Companheiro ativo", "Atributos e habilidades livres reais do companheiro ativo. São mantidas as habilidades aprendidas e os atributos já gastos.")
         companionTitle = text("Companheiro", 14f, GOLD, true)
-        companionTraitCurrent = text("Bônus extras de atributos: —", 14f, TEXT)
-        companionSkillCurrent = text("Bônus de habilidades: —", 14f, TEXT)
+        companionTraitCurrent = text("Atributos livres reais: —", 14f, TEXT)
+        companionSkillCurrent = text("Habilidades livres reais: —", 14f, TEXT)
         companionTraitInput = number("Atributos para adicionar", "10")
         companionSkillInput = number("Habilidades para adicionar", "10")
         companionCard.addView(companionTitle)
@@ -326,9 +326,16 @@ class MainActivity : Activity() {
                 "• $shortPath\n" +
                     "Ouro: ${format(previous?.gold, info.gold)}\n" +
                     "Atributos livres reais: ${format(previous?.freeTraitPoints, info.freeTraitPoints ?: "indisponível")}\n" +
-                    "Bônus extras registrados: ${format(previous?.traitPoints, info.traitPoints)}\n" +
-                    "Nível ${info.characterLevel ?: "?"} | Já gastos: ${info.spentTraitPoints ?: "?"}\n" +
-                    "Bônus de habilidades (arquivo): ${format(previous?.skillPoints, info.skillPoints)}"
+                    "Bônus extras de atributos: ${format(previous?.traitPoints, info.traitPoints)}\n" +
+                    "Atributos gastos: ${info.spentTraitPoints ?: "?"}\n" +
+                    "Habilidades livres reais: ${format(previous?.freeSkillPoints, info.freeSkillPoints ?: "indisponível")}\n" +
+                    "Bônus de habilidades: ${format(previous?.skillPoints, info.skillPoints)}\n" +
+                    "Habilidades gastas: ${info.spentSkillPoints ?: "?"}\n" +
+                    "Companheiro: ${info.companion?.name ?: "nenhum"}" +
+                    (info.companion?.let { c ->
+                        "\n  Atributos livres: ${c.freeTraitPoints ?: "indisponível"}" +
+                        " | Habilidades livres: ${c.freeSkillPoints ?: "indisponível"}"
+                    } ?: "")
             }
             AlertDialog.Builder(this)
                 .setTitle("Conferência: ${updated.size}/${updated.size} saves")
@@ -366,10 +373,7 @@ class MainActivity : Activity() {
                         if (occupied) Color.rgb(150, 117, 73) else Color.rgb(48, 58, 62))
                     contentDescription = "Espaço ${index + 1}: $label"
                     if (occupied) setOnClickListener {
-                        AlertDialog.Builder(this@MainActivity).setTitle(label)
-                            .setMessage("Espaço ${index + 1} de ${slots.size}" +
-                                if (slot.count > 1) "\nQuantidade: ${slot.count}" else "")
-                            .setPositiveButton("Fechar", null).show()
+                        showInventorySlotActions(index, slot, label)
                     }
                 }
                 tile.addView(text(iconFor(label, occupied), 26f, if (occupied) TEXT else MUTED).apply {
@@ -391,6 +395,53 @@ class MainActivity : Activity() {
             repeat(4 - group.size) { row.addView(View(this), LinearLayout.LayoutParams(0, dp(96), 1f)) }
             inventoryGrid.addView(row, margin(0, 0))
         }
+    }
+
+    private fun showInventorySlotActions(index: Int, slot: EkBackup.InventorySlot, label: String) {
+        AlertDialog.Builder(this)
+            .setTitle(label)
+            .setMessage("Espaço ${index + 1}. Quantidade atual: ${slot.count}.\n" +
+                "A edição será aplicada ao mesmo item em todos os saves, mesmo se ele estiver em outra posição.")
+            .setItems(arrayOf("Alterar quantidade", "Excluir item")) { _, choice ->
+                when (choice) {
+                    0 -> {
+                        val input = number("Nova quantidade", slot.count.toString())
+                        val wrapper = LinearLayout(this).apply {
+                            orientation = LinearLayout.VERTICAL
+                            setPadding(dp(18), dp(8), dp(18), dp(8))
+                            addView(text(label, 13f, MUTED))
+                            addView(input, margin(5, 2))
+                        }
+                        AlertDialog.Builder(this).setTitle("Alterar quantidade")
+                            .setMessage("O número informado substituirá a quantidade deste stack em todos os saves.")
+                            .setView(wrapper)
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Aplicar") { _, _ ->
+                                try {
+                                    val amount = numberValue(input, "Quantidade do item", 999, 1).toInt()
+                                    applyChange("Quantidade de $label → $amount") { paths ->
+                                        EkBackup.EditPlan(paths, slotEdits = listOf(
+                                            EkBackup.SlotEdit(index, slot.id, slot.count, amount)))
+                                    }
+                                } catch (e: Exception) {
+                                    notifyError(e.message ?: "Quantidade inválida")
+                                }
+                            }.show()
+                    }
+                    1 -> {
+                        AlertDialog.Builder(this).setTitle("Excluir $label?")
+                            .setMessage("Será removido um stack desse item de cada save. " +
+                                "O programa verifica o ID antes de excluir e cancela tudo se não localizar o item.")
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Excluir") { _, _ ->
+                                applyChange("Exclusão de $label") { paths ->
+                                    EkBackup.EditPlan(paths, slotEdits = listOf(
+                                        EkBackup.SlotEdit(index, slot.id, slot.count, 0)))
+                                }
+                            }.show()
+                    }
+                }
+            }.setNegativeButton("Fechar", null).show()
     }
 
     private fun confirmReset(message: String, callback: () -> Unit) {
@@ -460,13 +511,21 @@ class MainActivity : Activity() {
             val before = saves.associateBy { it.path }
             val result = EkBackup.apply(source, requested) // sem alterações parciais
             val readback = EkBackup.inspect(result)
-            val traitReport = if (requested.traitDelta != null || requested.resetTraits) {
-                val first = readback.first()
-                val previous = before[first.path]
-                if (previous?.freeTraitPoints != null && first.freeTraitPoints != null) {
-                    " Saldo de atributos: ${previous.freeTraitPoints} → ${first.freeTraitPoints}."
-                } else " Verifique o saldo de atributos na conferência."
-            } else ""
+            val first = readback.first()
+            val previous = before[first.path]
+            val traitReport = when {
+                requested.traitDelta != null || requested.resetTraits -> {
+                    if (previous?.freeTraitPoints != null && first.freeTraitPoints != null)
+                        " Atributos: ${previous.freeTraitPoints} → ${first.freeTraitPoints}."
+                    else " Confira o bônus de atributos em todos os saves."
+                }
+                requested.skillDelta != null || requested.resetSkills -> {
+                    if (previous?.freeSkillPoints != null && first.freeSkillPoints != null)
+                        " Habilidades: ${previous.freeSkillPoints} → ${first.freeSkillPoints}."
+                    else " Confira o bônus de habilidades em todos os saves."
+                }
+                else -> ""
+            }
             editedBytes = result
             saves = readback
             appliedChanges++
@@ -486,7 +545,7 @@ class MainActivity : Activity() {
         if (representative == null) {
             goldCurrent.text = "Ouro atual: —"
             traitCurrent.text = "Pontos livres atuais: —"
-            skillCurrent.text = "Bônus de habilidades no arquivo: —"
+            skillCurrent.text = "Habilidades livres atuais: —"
             itemsCurrent.text = "Nenhum inventário carregado"
             inventoryGrid.removeAllViews()
             companionCard.visibility = View.GONE
@@ -505,7 +564,14 @@ class MainActivity : Activity() {
                 " • Nível ${representative.characterLevel}" +
                 " • Gastos: ${representative.spentTraitPoints}"
         }
-        skillCurrent.text = value("Bônus de habilidades no arquivo", saves.map { it.skillPoints }, representative.skillPoints)
+        skillCurrent.text = if (representative.freeSkillPoints == null) {
+            "Pontos livres: cálculo indisponível (habilidade de custo não catalogado).\n" +
+                "Bônus de habilidades no arquivo: ${representative.skillPoints}"
+        } else {
+            value("Pontos livres reais", saves.map { it.freeSkillPoints }, representative.freeSkillPoints) +
+                "\nBônus de habilidades: ${representative.skillPoints}" +
+                " • Gastos: ${representative.spentSkillPoints}"
+        }
         if (fillGold) goldInput.setText(representative.gold.toString())
         val minimumFree = saves.minOf { it.freeSlots }
         itemsCurrent.text = "Inventário de referência: ${representative.hero}\n" +
@@ -516,8 +582,18 @@ class MainActivity : Activity() {
         if (companions.isNotEmpty()) {
             val companion = representative.companion ?: companions.first()
             companionTitle.text = companion.name
-            companionTraitCurrent.text = value("Bônus extras de atributos", companions.map { it.traitPoints }, companion.traitPoints)
-            companionSkillCurrent.text = value("Bônus de habilidades", companions.map { it.skillPoints }, companion.skillPoints)
+            companionTraitCurrent.text = if (companion.freeTraitPoints == null) {
+                "Atributos livres: indisponível • bônus extras: ${companion.traitPoints}"
+            } else {
+                value("Atributos livres reais", companions.map { it.freeTraitPoints }, companion.freeTraitPoints) +
+                    "\nBônus extras: ${companion.traitPoints} • Gastos: ${companion.spentTraitPoints}"
+            }
+            companionSkillCurrent.text = if (companion.freeSkillPoints == null) {
+                "Habilidades livres: indisponível • bônus extras: ${companion.skillPoints}"
+            } else {
+                value("Habilidades livres reais", companions.map { it.freeSkillPoints }, companion.freeSkillPoints) +
+                    "\nBônus extras: ${companion.skillPoints} • Gastos: ${companion.spentSkillPoints}"
+            }
             companionCard.visibility = View.VISIBLE
         } else companionCard.visibility = View.GONE
         sourceDetails.text = "${saves.size} saves identificados. ${if (appliedChanges == 0) "Nenhuma edição aplicada." else "$appliedChanges edição(ões) aplicada(s) em todos."}"
