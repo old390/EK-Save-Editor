@@ -26,6 +26,11 @@ class EkBackupTest {
             "\t\t\t\tspentPoints: [ 6, 0, 0, 0, 0, 0 ]\n" +
             "\t\t\t\tcached_level: 1\n" +
             "\t\t\t\tbonusPoints: 3\n" +
+            "\t\t\t\tskillSet: {\n" +
+            "\t\t\t\t\tcharacterSkills: [\n" +
+            "\t\t\t\t\t\t{\n\t\t\t\t\t\t\tlevel: 1\n\t\t\t\t\t\t\tskillID: dungeoneering\n\t\t\t\t\t\t}\n" +
+            "\t\t\t\t\t]\n" +
+            "\t\t\t\t}\n" +
             "\t\t}\n" +
             "\t}\n" +
             "\tbackpack: {\n" +
@@ -157,11 +162,11 @@ class EkBackupTest {
         val twice = EkBackup.apply(once, EkBackup.EditPlan(target, companionTraitDelta = 7, companionSkillDelta = 5))
         assertEquals(18, EkBackup.inspect(twice).single().companion?.traitPoints)
         assertEquals(12, EkBackup.inspect(twice).single().companion?.skillPoints)
-        val reset = EkBackup.apply(twice, EkBackup.EditPlan(target, resetCompanionTraits = true, resetCompanionSkills = true))
-        assertEquals(0, EkBackup.inspect(reset).single().companion?.traitPoints)
-        assertEquals(0, EkBackup.inspect(reset).single().companion?.skillPoints)
-        assertEquals(2, EkBackup.inspect(reset).single().traitPoints)
-        assertEquals(3, EkBackup.inspect(reset).single().skillPoints)
+        // O fixture antigo não contém nível/gastos do companheiro:
+        // somente os bônus podem ser testados aqui. O zeramento é testado abaixo
+        // em um fixture completo para não simular saldos inexistentes.
+        assertEquals(null, EkBackup.inspect(twice).single().companion?.freeTraitPoints)
+        assertEquals(null, EkBackup.inspect(twice).single().companion?.freeSkillPoints)
     }
 
     @Test fun changesAttributesInAllFourSaveEntriesAndKeepsIndependentValues() {
@@ -354,6 +359,141 @@ class EkBackupTest {
         val result = EkBackup.inspect(input).single()
         assertEquals(null, result.freeTraitPoints)
         assertEquals(2, result.traitPoints)
+    }
+
+
+    /** Dez habilidades com custo total 39 para personagem de nível 16. */
+    private fun clericWithLearnedSkills(): ByteArray {
+        val original = String(Base64.getDecoder().decode(level16Save()), Charsets.UTF_8)
+        val list = listOf(
+            "heal_wounds" to 3, "crusader" to 3, "dungeoneering" to 2,
+            "gossip" to 1, "nivarias_barrier" to 2, "intervention" to 2,
+            "extra_recovery" to 2, "arbenos_might" to 3, "sacred_fire" to 3,
+            "holy_shield" to 2
+        ).joinToString("\n") { (id, rank) ->
+            "\t\t\t\t\t{\n\t\t\t\t\t\tlevel: $rank\n\t\t\t\t\t\tskillID: $id\n\t\t\t\t\t}"
+        }
+        val modified = original.replace("\t\t\t\tbonusPoints: 8",
+            "\t\t\t\tcharacterSkills: [\n$list\n\t\t\t\t]\n\t\t\t\tbonusPoints: 8")
+        return Base64.getEncoder().encode(modified.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun companionWithProgress(): ByteArray {
+        val hero = String(Base64.getDecoder().decode(save(100)), Charsets.UTF_8)
+        val abilities = listOf(
+            "shield_expert" to 2, "dungeoneering" to 1, "cleave" to 2,
+            "fury" to 1, "whirlwind" to 1, "two_handed_expert" to 3, "bash" to 2
+        ).joinToString("\n") { (id, rank) ->
+            "\t\t\t\t\t\t\t{\n\t\t\t\t\t\t\t\tlevel: $rank\n\t\t\t\t\t\t\t\tskillID: $id\n\t\t\t\t\t\t\t}"
+        }
+        val party = "\tparty: {\n" +
+            "\t\tactiveCompanion: grissenda\n" +
+            "\t\tcompanions: [\n" +
+            "\t\t\t{\n\t\t\t\tspawn_id: grissenda\n\t\t\t\tname: Grissenda\n" +
+            "\t\t\t\tsheet: {\n" +
+            "\t\t\t\t\ttraits: {\n" +
+            "\t\t\t\t\t\textraTraitPoints: 10\n" +
+            "\t\t\t\t\t\tspentPoints: [ 10, 10, 3, 0, 0, 1 ]\n" +
+            "\t\t\t\t\t}\n" +
+            "\t\t\t\t\tstats: {\n\t\t\t\t\t\tcached_level: 14\n\t\t\t\t\t}\n" +
+            "\t\t\t\t\tskillSet: {\n" +
+            "\t\t\t\t\t\tcharacterSkills: [\n$abilities\n\t\t\t\t\t\t]\n" +
+            "\t\t\t\t\t\tbonusPoints: 2\n" +
+            "\t\t\t\t\t}\n" +
+            "\t\t\t\t}\n" +
+            "\t\t\t}\n" +
+            "\t\t]\n" +
+            "\t}\n"
+        return Base64.getEncoder().encode((hero + party).toByteArray(Charsets.UTF_8))
+    }
+
+    private fun zipSave(entry: ByteArray): ByteArray = ByteArrayOutputStream().also { out ->
+        ZipOutputStream(out).use { zip ->
+            zip.putNextEntry(ZipEntry("saves/0/auto.sav"))
+            zip.write(entry)
+            zip.closeEntry()
+        }
+    }.toByteArray()
+
+    @Test fun level16SkillBalanceReadsRealFreePointsAndResetSafely() {
+        val data = zipSave(clericWithLearnedSkills())
+        val paths = setOf("saves/0/auto.sav")
+        assertEquals(0, EkBackup.inspect(data).single().freeSkillPoints)
+        assertEquals(39, EkBackup.inspect(data).single().spentSkillPoints)
+        val added = EkBackup.apply(data, EkBackup.EditPlan(paths, skillDelta = 20))
+        assertEquals(20, EkBackup.inspect(added).single().freeSkillPoints)
+        val addedAgain = EkBackup.apply(added, EkBackup.EditPlan(paths, skillDelta = 10))
+        assertEquals(30, EkBackup.inspect(addedAgain).single().freeSkillPoints)
+        val reset = EkBackup.apply(addedAgain, EkBackup.EditPlan(paths, resetSkills = true))
+        assertEquals(0, EkBackup.inspect(reset).single().freeSkillPoints)
+        assertEquals(39, EkBackup.inspect(reset).single().spentSkillPoints)
+    }
+
+    @Test fun companionFreeAttributeAndSkillPointsUseIndependentLevelRules() {
+        val data = zipSave(companionWithProgress())
+        val paths = setOf("saves/0/auto.sav")
+        val before = EkBackup.inspect(data).single().companion!!
+        assertEquals(3, before.freeTraitPoints)
+        assertEquals(0, before.freeSkillPoints)
+        assertEquals(24, before.spentTraitPoints)
+        assertEquals(16, before.spentSkillPoints)
+        val changed = EkBackup.apply(data, EkBackup.EditPlan(paths,
+            companionTraitDelta = 20, companionSkillDelta = 5))
+        val after = EkBackup.inspect(changed).single().companion!!
+        assertEquals(23, after.freeTraitPoints)
+        assertEquals(5, after.freeSkillPoints)
+        val reset = EkBackup.apply(changed, EkBackup.EditPlan(paths,
+            resetCompanionTraits = true, resetCompanionSkills = true))
+        val zero = EkBackup.inspect(reset).single().companion!!
+        assertEquals(0, zero.freeTraitPoints)
+        assertEquals(0, zero.freeSkillPoints)
+        assertEquals(24, zero.spentTraitPoints)
+        assertEquals(16, zero.spentSkillPoints)
+    }
+
+    private fun archiveWithShiftedItem(missingGameItem: Boolean = false): ByteArray =
+        ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                for (name in listOf("auto.sav", "game.sav")) {
+                    val original = String(Base64.getDecoder().decode(save(11)), Charsets.UTF_8)
+                    val ids = if (name == "auto.sav") "5070, 0, 0, 0"
+                              else if (missingGameItem) "554, 0, 0, 0"
+                              else "554, 5070, 0, 0"
+                    val amounts = if (name == "auto.sav") "7, 0, 0, 0"
+                                  else if (missingGameItem) "1, 0, 0, 0"
+                                  else "1, 7, 0, 0"
+                    val adjusted = original.replace("itemList: [ 0, 0, 0, 0 ]", "itemList: [ $ids ]")
+                        .replace("stackUnits: [ 0, 0, 0, 0 ]", "stackUnits: [ $amounts ]")
+                    zip.putNextEntry(ZipEntry("saves/0/$name"))
+                    zip.write(Base64.getEncoder().encode(adjusted.toByteArray(Charsets.UTF_8)))
+                    zip.closeEntry()
+                }
+                zip.putNextEntry(ZipEntry("saves/global.sav"))
+                zip.write("metadata untouched".toByteArray())
+                zip.closeEntry()
+            }
+        }.toByteArray()
+
+    @Test fun inventoryGridChangesQuantityAndDeletesSameIdInDifferentSlots() {
+        val original = archiveWithShiftedItem()
+        val paths = EkBackup.inspect(original).map { it.path }.toSet()
+        val changed = EkBackup.apply(original, EkBackup.EditPlan(paths,
+            slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 12))))
+        assertTrue(EkBackup.inspect(changed).all { it.inventory[5070] == 12 })
+        assertEquals(1, EkBackup.inspect(changed).single { it.path.endsWith("game.sav") }.inventory[554])
+        val deleted = EkBackup.apply(changed, EkBackup.EditPlan(paths,
+            slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 12, 0))))
+        assertTrue(EkBackup.inspect(deleted).all { 5070 !in it.inventory })
+        assertEquals(1, EkBackup.inspect(deleted).single { it.path.endsWith("game.sav") }.inventory[554])
+        assertTrue(entries(original).getValue("saves/global.sav")
+            .contentEquals(entries(deleted).getValue("saves/global.sav")))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun inventoryGridRefusesToDeleteMissingItemInOneSave() {
+        val data = archiveWithShiftedItem(missingGameItem = true)
+        EkBackup.apply(data, EkBackup.EditPlan(EkBackup.inspect(data).map { it.path }.toSet(),
+            slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 0))))
     }
 
 }
