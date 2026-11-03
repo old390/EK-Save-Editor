@@ -917,4 +917,174 @@ class EkBackupTest {
         assertTrue(EkBackup.inspect(second).all { it.inventory[5013] == 2 })
     }
 
+
+    private fun cityVaultBackup(): ByteArray = ByteArrayOutputStream().also { output ->
+        ZipOutputStream(output).use { zip ->
+            val names = listOf("auto.sav", "auto2.sav", "game.sav", "game2.sav")
+            names.forEachIndexed { saveIndex, name ->
+                val basic = String(Base64.getDecoder().decode(save(100 + saveIndex)), Charsets.UTF_8)
+                val firstVault = when (saveIndex) {
+                    0 -> listOf(5013, 0, 5013, 0)
+                    1 -> listOf(0, 5013, 0, 5013)
+                    2 -> listOf(5013, 5013, 0, 0)
+                    else -> listOf(554, 5013, 0, 5013)
+                } + List(16) { 0 }
+                val vaults = (1..4).joinToString("\n") { number ->
+                    val ids = when (number) {
+                        1 -> firstVault
+                        2 -> (554..573).toList() // Segundo baú completamente cheio
+                        3 -> listOf(5070) + List(19) { 0 }
+                        else -> List(20) { 0 }
+                    }
+                    val quantities = ids.map { id ->
+                        if (id == 0) 0 else if (id == 5070) 10 + saveIndex else 1
+                    }
+                    val id = if (number == 1) "vault" else "vault" + number
+                    "\t\t{\n\t\t\tid: $id\n\t\t\titems: {\n" +
+                        "\t\t\t\titemList: [ ${ids.joinToString(", ")} ]\n" +
+                        "\t\t\t\tstackUnits: [ ${quantities.joinToString(", ")} ]\n" +
+                        "\t\t\t}\n\t\t}"
+                }
+                val prefix = "\thasVault: true\n\thasVault2: true\n" +
+                    "\thasVault3: true\n\thasVault4: ${saveIndex != 1}\n" +
+                    "\tworldContainers: [\n$vaults\n\t]\n"
+                val full = basic.replace("\tbackpack: {", prefix + "\tbackpack: {")
+                zip.putNextEntry(ZipEntry("saves/0/$name"))
+                zip.write(Base64.getEncoder().encode(full.toByteArray(Charsets.UTF_8)))
+                zip.closeEntry()
+            }
+            zip.putNextEntry(ZipEntry("saves/global.sav"))
+            zip.write("keep this data unchanged".toByteArray())
+            zip.closeEntry()
+        }
+    }.toByteArray()
+
+    @Test fun townHallFourVaultsAreFoundSeparatelyInEverySave() {
+        val data = cityVaultBackup()
+        val all = EkBackup.inspectVaults(data)
+        assertEquals(4, all.size)
+        for ((_, vaults) in all) {
+            assertEquals(listOf(1, 2, 3, 4), vaults.map { it.number })
+            assertEquals(List(4) { 20 }, vaults.map { it.slots.size })
+            assertEquals(20, vaults.single { it.number == 2 }.occupied)
+            assertEquals(20, vaults.single { it.number == 4 }.free)
+        }
+        assertTrue(all.getValue("saves/0/auto2.sav").single { it.number == 4 }.unlocked.not())
+        assertTrue(all.getValue("saves/0/game.sav").single { it.number == 4 }.unlocked)
+    }
+
+    @Test fun townHallUnlockUpdatesFlagsInFourSavesPreservingContents() {
+        val original = cityVaultBackup()
+        val paths = EkBackup.inspect(original).map { it.path }.toSet()
+        val before = EkBackup.inspectVaults(original)
+        val changed = EkBackup.apply(original, EkBackup.EditPlan(paths,
+            vaultChange = VaultStorage.Change(4, VaultStorage.Action.UNLOCK)))
+        val after = EkBackup.inspectVaults(changed)
+        assertTrue(after.values.all { list -> list.single { it.number == 4 }.unlocked })
+        for (path in paths) {
+            assertEquals(before.getValue(path).map { it.slots }, after.getValue(path).map { it.slots })
+        }
+        assertEquals(EkBackup.inspect(original), EkBackup.inspect(changed))
+        assertTrue(entries(original).getValue("saves/global.sav")
+            .contentEquals(entries(changed).getValue("saves/global.sav")))
+    }
+
+    @Test fun townHallDuplicateTomesAndDeleteSecondOnlyAcrossFourSaves() {
+        val original = cityVaultBackup()
+        val paths = EkBackup.inspect(original).map { it.path }.toSet()
+        val edited = EkBackup.apply(original, EkBackup.EditPlan(paths,
+            vaultChange = VaultStorage.Change(1, VaultStorage.Action.ADD,
+                index = 2, itemId = 5013, amount = 2, occurrence = 1)))
+        for (list in EkBackup.inspectVaults(edited).values) {
+            val vault1 = list.single { it.number == 1 }
+            assertEquals(4, vault1.total(5013))
+            assertTrue(vault1.slots.filter { it.id == 5013 }.all { it.count == 1 })
+        }
+        val deleted = EkBackup.apply(edited, EkBackup.EditPlan(paths,
+            vaultChange = VaultStorage.Change(1, VaultStorage.Action.DELETE,
+                index = 2, itemId = 5013, occurrence = 1)))
+        for (list in EkBackup.inspectVaults(deleted).values) {
+            val vault1 = list.single { it.number == 1 }
+            assertEquals(3, vault1.total(5013))
+            assertEquals(3, vault1.slots.filter { it.id == 5013 && it.count == 1 }.size)
+        }
+        assertTrue(EkBackup.inspectVaults(original).keys.all { path ->
+            EkBackup.inspectVaults(original).getValue(path).single { it.number == 2 } ==
+                EkBackup.inspectVaults(deleted).getValue(path).single { it.number == 2 }
+        })
+        assertEquals(EkBackup.inspect(original), EkBackup.inspect(deleted))
+    }
+
+    @Test fun townHallStackQuantitiesPreserveDifferencesBetweenSaves() {
+        val original = cityVaultBackup()
+        val paths = EkBackup.inspect(original).map { it.path }.toSet()
+        val changed = EkBackup.apply(original, EkBackup.EditPlan(paths,
+            vaultChange = VaultStorage.Change(3, VaultStorage.Action.ADD,
+                index = 0, itemId = 5070, amount = 5, occurrence = 0)))
+        val after = EkBackup.inspectVaults(changed)
+        val amounts = listOf("auto.sav", "auto2.sav", "game.sav", "game2.sav").map {
+            after.getValue("saves/0/$it").single { v -> v.number == 3 }.total(5070)
+        }
+        assertEquals(listOf(15, 16, 17, 18), amounts)
+        val fixed = EkBackup.apply(changed, EkBackup.EditPlan(paths,
+            vaultChange = VaultStorage.Change(3, VaultStorage.Action.SET,
+                index = 0, itemId = 5070, amount = 80, occurrence = 0)))
+        assertTrue(EkBackup.inspectVaults(fixed).values.all {
+            it.single { v -> v.number == 3 }.total(5070) == 80
+        })
+    }
+
+    @Test fun townHallVault2FullRequiresConfirmedReplacement() {
+        val original = cityVaultBackup()
+        val paths = EkBackup.inspect(original).map { it.path }.toSet()
+        assertTrue(runCatching {
+            EkBackup.apply(original, EkBackup.EditPlan(paths,
+                vaultChange = VaultStorage.Change(2, VaultStorage.Action.INSERT,
+                    index = 0, itemId = 5013, amount = 1)))
+        }.isFailure)
+        val expected = EkBackup.inspectVaults(original).mapValues { (_, vaults) ->
+            vaults.single { it.number == 2 }.slots[0]
+        }
+        val edited = EkBackup.apply(original, EkBackup.EditPlan(paths,
+            vaultChange = VaultStorage.Change(2, VaultStorage.Action.REPLACE,
+                index = 0, itemId = 5013, amount = 1, expectedByPath = expected)))
+        assertTrue(EkBackup.inspectVaults(edited).values.all { vaults ->
+            val vault2 = vaults.single { it.number == 2 }
+            vault2.slots[0].id == 5013 && vault2.slots[0].count == 1 && vault2.occupied == 20
+        })
+        assertEquals(EkBackup.inspect(original), EkBackup.inspect(edited))
+    }
+
+    @Test fun townHallReplacementCannotSilentlyOverwriteChangedSlot() {
+        val original = cityVaultBackup()
+        val paths = EkBackup.inspect(original).map { it.path }.toSet()
+        val expected = EkBackup.inspectVaults(original).mapValues { (_, vaults) ->
+            vaults.single { it.number == 2 }.slots[0]
+        }.toMutableMap()
+        expected["saves/0/auto2.sav"] = EkBackup.InventorySlot(1, 1)
+        assertTrue(runCatching {
+            EkBackup.apply(original, EkBackup.EditPlan(paths,
+                vaultChange = VaultStorage.Change(2, VaultStorage.Action.REPLACE,
+                    index = 0, itemId = 5013, amount = 1, expectedByPath = expected)))
+        }.isFailure)
+    }
+
+    @Test fun townHallEditingLockedVaultIsRejectedBeforeUnlocking() {
+        val original = cityVaultBackup()
+        val paths = EkBackup.inspect(original).map { it.path }.toSet()
+        assertTrue(runCatching {
+            EkBackup.apply(original, EkBackup.EditPlan(paths,
+                vaultChange = VaultStorage.Change(4, VaultStorage.Action.INSERT,
+                    index = 0, itemId = 5070, amount = 5)))
+        }.isFailure)
+        val unlocked = EkBackup.apply(original, EkBackup.EditPlan(paths,
+            vaultChange = VaultStorage.Change(4, VaultStorage.Action.UNLOCK)))
+        val inserted = EkBackup.apply(unlocked, EkBackup.EditPlan(paths,
+            vaultChange = VaultStorage.Change(4, VaultStorage.Action.INSERT,
+                index = 0, itemId = 5070, amount = 5)))
+        assertTrue(EkBackup.inspectVaults(inserted).values.all {
+            it.single { v -> v.number == 4 }.total(5070) == 5
+        })
+    }
+
 }
