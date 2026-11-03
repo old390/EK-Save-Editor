@@ -1101,10 +1101,15 @@ class EkBackupTest {
                 }
                 // Save inicial de personagem: sem extraTraitPoints e bonusPoints.
                 for (name in listOf("auto.sav", "game.sav", "game2.sav")) {
-                    val content = String(Base64.getDecoder().decode(save(200)), Charsets.UTF_8)
-                        .replace("name: Test Warrior", "name: Shep Sossar")
-                        .replace("\t\t\t\textraTraitPoints: 2\n", "")
-                        .replace("\t\t\t\tbonusPoints: 3\n", "")
+                    val content = String(Base64.getDecoder().decode(level16Save()), Charsets.UTF_8)
+                        .replace("name: Test Cleric", "name: Shep Sossar")
+                        .replace("gold: 25", "gold: 200")
+                        .replace("characterClass: CLERIC", "characterClass: WARRIOR")
+                        .replace("cached_level: 16", "cached_level: 1")
+                        .replace("spentPoints: [ 10, 10, 3, 6, 6, 10 ]",
+                            "spentPoints: [ 0, 0, 0, 0, 1, 3 ]")
+                        .replace("\t\t\t\textraTraitPoints: 10\n", "")
+                        .replace("\t\t\t\tbonusPoints: 8\n", "")
                     zip.putNextEntry(ZipEntry("saves/2/$name"))
                     zip.write(Base64.getEncoder().encode(content.toByteArray(Charsets.UTF_8)))
                     zip.closeEntry()
