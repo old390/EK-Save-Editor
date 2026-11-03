@@ -172,7 +172,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.4.1", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.4.3", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -231,7 +231,7 @@ class MainActivity : Activity() {
         }, margin(4, 0))
         body.addView(gold, margin(0, 12))
 
-        val attributes = section("💪  Atributos", "Cada toque em Aplicar SOMA a quantidade informada aos pontos livres. Zerar não remove pontos já distribuídos.")
+        val attributes = section("💪  Atributos", "Saldo real = pontos recebidos por nível + bônus extras − pontos já gastos. Cada toque em Somar acrescenta o número digitado em todos os saves.")
         traitCurrent = text("Pontos livres atuais: —", 14f, TEXT, true)
         traitDeltaInput = number("Pontos para adicionar", "10")
         attributes.addView(traitCurrent)
@@ -247,8 +247,8 @@ class MainActivity : Activity() {
         })
         body.addView(attributes, margin(0, 12))
 
-        val skills = section("✨  Habilidades", "Cada toque em Aplicar soma mais pontos livres ao total existente.")
-        skillCurrent = text("Pontos livres atuais: —", 14f, TEXT, true)
+        val skills = section("✨  Habilidades", "Soma o bônus de habilidades armazenado no save. O saldo livre real depende também das habilidades aprendidas.")
+        skillCurrent = text("Bônus de habilidades no arquivo: —", 14f, TEXT, true)
         skillDeltaInput = number("Pontos para adicionar", "10")
         skills.addView(skillCurrent)
         skills.addView(skillDeltaInput, margin(8, 5))
@@ -265,8 +265,8 @@ class MainActivity : Activity() {
 
         companionCard = section("🛡️  Companheiro ativo", "Só são mostrados os atributos e habilidades do companheiro ativo. Aplicar soma pontos em todos os saves em que ele estiver ativo.")
         companionTitle = text("Companheiro", 14f, GOLD, true)
-        companionTraitCurrent = text("Atributos livres: —", 14f, TEXT)
-        companionSkillCurrent = text("Habilidades livres: —", 14f, TEXT)
+        companionTraitCurrent = text("Bônus extras de atributos: —", 14f, TEXT)
+        companionSkillCurrent = text("Bônus de habilidades: —", 14f, TEXT)
         companionTraitInput = number("Atributos para adicionar", "10")
         companionSkillInput = number("Habilidades para adicionar", "10")
         companionCard.addView(companionTitle)
@@ -325,8 +325,10 @@ class MainActivity : Activity() {
                 fun format(old: Any?, now: Any) = if (old == null || old == now) "$now" else "$old → $now"
                 "• $shortPath\n" +
                     "Ouro: ${format(previous?.gold, info.gold)}\n" +
-                    "Atributos livres: ${format(previous?.traitPoints, info.traitPoints)}\n" +
-                    "Habilidades livres: ${format(previous?.skillPoints, info.skillPoints)}"
+                    "Atributos livres reais: ${format(previous?.freeTraitPoints, info.freeTraitPoints ?: "indisponível")}\n" +
+                    "Bônus extras registrados: ${format(previous?.traitPoints, info.traitPoints)}\n" +
+                    "Nível ${info.characterLevel ?: "?"} | Já gastos: ${info.spentTraitPoints ?: "?"}\n" +
+                    "Bônus de habilidades (arquivo): ${format(previous?.skillPoints, info.skillPoints)}"
             }
             AlertDialog.Builder(this)
                 .setTitle("Conferência: ${updated.size}/${updated.size} saves")
@@ -454,12 +456,22 @@ class MainActivity : Activity() {
         try {
             val source = editedBytes ?: error("Importe EK.bak primeiro")
             val paths = allPaths()
-            val result = EkBackup.apply(source, plan(paths)) // transactional: no partial app changes on failure
+            val requested = plan(paths)
+            val before = saves.associateBy { it.path }
+            val result = EkBackup.apply(source, requested) // sem alterações parciais
             val readback = EkBackup.inspect(result)
+            val traitReport = if (requested.traitDelta != null || requested.resetTraits) {
+                val first = readback.first()
+                val previous = before[first.path]
+                if (previous?.freeTraitPoints != null && first.freeTraitPoints != null) {
+                    " Saldo de atributos: ${previous.freeTraitPoints} → ${first.freeTraitPoints}."
+                } else " Verifique o saldo de atributos na conferência."
+            } else ""
             editedBytes = result
             saves = readback
             appliedChanges++
-            lastChange.text = "✓ $label conferido em ${paths.size}/${paths.size} saves. $appliedChanges alteração(ões) em memória. Exporte o EK.bak para salvar."
+            lastChange.text = "✓ $label conferido em ${paths.size}/${paths.size} saves.$traitReport " +
+                "$appliedChanges alteração(ões) em memória. Exporte EK.bak para salvar."
             lastChange.setTextColor(Color.rgb(129, 214, 136))
             refreshPreview(false)
             updateEnabled()
@@ -474,7 +486,7 @@ class MainActivity : Activity() {
         if (representative == null) {
             goldCurrent.text = "Ouro atual: —"
             traitCurrent.text = "Pontos livres atuais: —"
-            skillCurrent.text = "Pontos livres atuais: —"
+            skillCurrent.text = "Bônus de habilidades no arquivo: —"
             itemsCurrent.text = "Nenhum inventário carregado"
             inventoryGrid.removeAllViews()
             companionCard.visibility = View.GONE
@@ -484,8 +496,16 @@ class MainActivity : Activity() {
             return "$label: $reference${if (values.distinct().size > 1) " (outros saves diferem)" else ""}"
         }
         goldCurrent.text = value("Ouro atual", saves.map { it.gold }, representative.gold)
-        traitCurrent.text = value("Pontos livres atuais", saves.map { it.traitPoints }, representative.traitPoints)
-        skillCurrent.text = value("Pontos livres atuais", saves.map { it.skillPoints }, representative.skillPoints)
+        traitCurrent.text = if (representative.freeTraitPoints == null) {
+            "Pontos livres: cálculo indisponível (nível ou histórico de gastos ausente).\n" +
+                "Pontos extras registrados: ${representative.traitPoints}"
+        } else {
+            value("Pontos livres reais", saves.map { it.freeTraitPoints }, representative.freeTraitPoints) +
+                "\nBônus extras no arquivo: ${representative.traitPoints}" +
+                " • Nível ${representative.characterLevel}" +
+                " • Gastos: ${representative.spentTraitPoints}"
+        }
+        skillCurrent.text = value("Bônus de habilidades no arquivo", saves.map { it.skillPoints }, representative.skillPoints)
         if (fillGold) goldInput.setText(representative.gold.toString())
         val minimumFree = saves.minOf { it.freeSlots }
         itemsCurrent.text = "Inventário de referência: ${representative.hero}\n" +
@@ -496,8 +516,8 @@ class MainActivity : Activity() {
         if (companions.isNotEmpty()) {
             val companion = representative.companion ?: companions.first()
             companionTitle.text = companion.name
-            companionTraitCurrent.text = value("Atributos livres", companions.map { it.traitPoints }, companion.traitPoints)
-            companionSkillCurrent.text = value("Habilidades livres", companions.map { it.skillPoints }, companion.skillPoints)
+            companionTraitCurrent.text = value("Bônus extras de atributos", companions.map { it.traitPoints }, companion.traitPoints)
+            companionSkillCurrent.text = value("Bônus de habilidades", companions.map { it.skillPoints }, companion.skillPoints)
             companionCard.visibility = View.VISIBLE
         } else companionCard.visibility = View.GONE
         sourceDetails.text = "${saves.size} saves identificados. ${if (appliedChanges == 0) "Nenhuma edição aplicada." else "$appliedChanges edição(ões) aplicada(s) em todos."}"
