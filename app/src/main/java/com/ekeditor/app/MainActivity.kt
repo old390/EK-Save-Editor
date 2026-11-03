@@ -71,6 +71,11 @@ class MainActivity : Activity() {
     private lateinit var companionSkillInput: EditText
     private lateinit var itemsCurrent: TextView
     private lateinit var inventoryGrid: LinearLayout
+    private var selectedVault = 1
+    private lateinit var vaultSelector: Button
+    private lateinit var vaultSummary: TextView
+    private lateinit var vaultGrid: LinearLayout
+    private lateinit var vaultUnlockButton: Button
     private lateinit var itemSelectionLabel: TextView
     private lateinit var potionSelectionLabel: TextView
     private lateinit var itemAmount: EditText
@@ -82,6 +87,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         catalog = ItemCatalog(this)
+        selectedVault = savedInstanceState?.getInt("selected_vault", 1)?.coerceIn(1, 4) ?: 1
         createInterface()
         if (savedInstanceState != null && savedInstanceState.getBoolean("has_session")) {
             try {
@@ -117,6 +123,7 @@ class MainActivity : Activity() {
             outState.putInt("applied_changes", appliedChanges)
             outState.putInt("item_id", selectedItem?.id ?: -1)
             outState.putInt("potion_id", selectedPotion?.id ?: -1)
+            outState.putInt("selected_vault", selectedVault)
         }
     }
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -177,7 +184,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.5.5", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.6.0", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -224,6 +231,33 @@ class MainActivity : Activity() {
         }, margin(5, 9))
         inventory.addView(text("⚠ Quando um save estiver cheio, a inserção simples será bloqueada. Você poderá escolher uma posição e confirmar quais itens serão substituídos em cada save. Nada será apagado automaticamente. Preserve o EK.bak original.", 12f, MUTED))
         body.addView(inventory, margin(0, 12))
+
+        val vaultSection = section("🏛️  Baús da Prefeitura",
+            "Escolha entre os quatro baús. Cada um tem 20 espaços próprios. " +
+                "A grade mostra um save de referência e aplica alterações verificadas em todos. " +
+                "Toque nos itens para adicionar cópias, definir quantidade, excluir ou substituir.")
+        vaultSelector = action("🗃️  Escolher baú") { showVaultMenu() }
+        vaultSummary = text("Importe EK.bak para consultar os baús.", 13f, TEXT)
+        vaultGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        vaultUnlockButton = editAction("🔓  Desbloquear baú selecionado") {
+            AlertDialog.Builder(this).setTitle("Desbloquear baú $selectedVault?")
+                .setMessage("Ativa o baú nos quatro saves sem descontar ouro. " +
+                    "É uma edição do backup, não uma compra no jogo. Prosseguir?")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Desbloquear") { _, _ ->
+                    applyVaultChange("Baú $selectedVault desbloqueado",
+                        VaultStorage.Change(selectedVault, VaultStorage.Action.UNLOCK))
+                }.show()
+        }
+        vaultSection.addView(vaultSelector, margin(2, 5))
+        vaultSection.addView(vaultSummary, margin(9, 6))
+        vaultSection.addView(vaultGrid, margin(3, 4))
+        vaultUnlockButton.visibility = View.GONE
+        vaultSection.addView(vaultUnlockButton, margin(7, 4))
+        vaultSection.addView(text("⚠ Os conteúdos podem variar entre saves. " +
+            "Substituições exibem o item de cada save antes de confirmar. " +
+            "Itens em vermelho ocupam apenas uma unidade por espaço.", 11f, MUTED), margin(5, 5))
+        body.addView(vaultSection, margin(0, 12))
 
         val gold = section("🪙  Ouro", "Defina a quantidade de ouro e toque em Aplicar. A mudança aparece imediatamente.")
         goldCurrent = text("Ouro atual: —", 14f, TEXT, true)
@@ -347,6 +381,250 @@ class MainActivity : Activity() {
                 .setMessage("Estes são os valores gravados no backup em memória. Ainda será necessário exportar e restaurar pelo jogo.\n\n$details")
                 .setPositiveButton("Entendi", null).show()
         } catch (e: Exception) { notifyError("Conferência falhou: ${e.message}") }
+    }
+
+    private fun vaultData(): Map<String, List<VaultStorage.VaultInfo>> {
+        val data = editedBytes ?: return emptyMap()
+        return EkBackup.inspectVaults(data)
+    }
+
+    private fun selectedVaultData(): Map<String, VaultStorage.VaultInfo> =
+        vaultData().mapNotNull { (path, vaults) ->
+            vaults.firstOrNull { it.number == selectedVault }?.let { path to it }
+        }.toMap()
+
+    private fun showVaultMenu() {
+        if (editedBytes == null) return notifyError("Importe EK.bak primeiro")
+        val bySave = vaultData()
+        val labels = (1..4).map { number ->
+            val vaults = bySave.values.mapNotNull { v -> v.firstOrNull { it.number == number } }
+            val state = when {
+                vaults.isEmpty() -> "não encontrado"
+                vaults.all { it.unlocked } -> "desbloqueado"
+                vaults.none { it.unlocked } -> "bloqueado"
+                else -> "diferente entre saves"
+            }
+            "Baú $number · $state"
+        }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Escolher baú da Prefeitura")
+            .setSingleChoiceItems(labels, selectedVault - 1) { dialog, choice ->
+                selectedVault = choice + 1
+                dialog.dismiss()
+                refreshVaultPreview()
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun refreshVaultPreview() {
+        vaultGrid.removeAllViews()
+        vaultSelector.text = "🗃️  Escolher baú · Baú $selectedVault"
+        val bySave = try { selectedVaultData() } catch (e: Exception) {
+            vaultSummary.text = "Baú indisponível: ${e.message}"
+            vaultUnlockButton.visibility = View.GONE
+            return
+        }
+        if (bySave.isEmpty()) {
+            vaultSummary.text = "Nenhum baú encontrado no backup."
+            vaultUnlockButton.visibility = View.GONE
+            return
+        }
+        val preview = previewSave()?.path?.let { bySave[it] } ?: bySave.values.first()
+        val allUnlocked = bySave.size == saves.size && bySave.values.all { it.unlocked }
+        val minimumFree = bySave.values.minOf { it.free }
+        vaultSummary.text =
+            "Baú $selectedVault · ${if (allUnlocked) "Desbloqueado" else "Há saves com o baú bloqueado"}\n" +
+            "Ocupados: ${preview.occupied}/20 · Livres neste save: ${preview.free} · " +
+            "Mínimo de espaços livres nos saves: $minimumFree"
+        vaultUnlockButton.visibility = if (allUnlocked) View.GONE else View.VISIBLE
+        if (!allUnlocked) {
+            vaultGrid.addView(text("Desbloqueie o baú nos saves antes de editar seu conteúdo.", 12f, MUTED))
+            return
+        }
+        val slots = preview.slots
+        for (block in slots.withIndex().toList().chunked(4)) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for ((index, slot) in block) {
+                val occupied = slot.id != 0
+                val label = if (occupied) catalog.name(slot.id) else "Vazio"
+                val glyph = when {
+                    !occupied -> "＋"
+                    ItemRules.isStackable(slot.id) -> "🧪"
+                    else -> "📦"
+                }
+                val displayed = "$glyph\n$label" +
+                    if (occupied && slot.count > 1) "\n×${slot.count}" else ""
+                val styled = SpannableString(displayed).apply {
+                    setSpan(RelativeSizeSpan(1.5f), 0, glyph.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (occupied && !ItemRules.isStackable(slot.id)) {
+                        val begin = glyph.length + 1
+                        setSpan(ForegroundColorSpan(NON_STACKABLE_RED), begin,
+                            begin + label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+                row.addView(Button(this).apply {
+                    text = styled
+                    textSize = 10f
+                    isAllCaps = false
+                    gravity = Gravity.CENTER
+                    minHeight = 0
+                    minimumHeight = 0
+                    minWidth = 0
+                    minimumWidth = 0
+                    maxLines = 4
+                    ellipsize = TextUtils.TruncateAt.END
+                    setPadding(dp(3), dp(3), dp(3), dp(3))
+                    setTextColor(if (occupied) TEXT else MUTED)
+                    background = shape(
+                        if (occupied) Color.rgb(43, 50, 57) else Color.rgb(15, 22, 27),
+                        if (occupied) Color.rgb(150, 117, 73) else Color.rgb(48, 58, 62))
+                    contentDescription = "Baú $selectedVault, espaço ${index + 1}: $label"
+                    setOnClickListener {
+                        val vaultNumber = selectedVault
+                        if (occupied) showVaultSlotActions(vaultNumber, index, slot, label)
+                        else chooseCatalog(false) { item ->
+                            askVaultItemQuantity("Adicionar ${item.name}", item) { count ->
+                                addIntoVaultSpace(vaultNumber, index, item, count)
+                            }
+                        }
+                    }
+                }, LinearLayout.LayoutParams(0, dp(112), 1f).apply {
+                    setMargins(dp(2), dp(2), dp(2), dp(2))
+                })
+            }
+            vaultGrid.addView(row)
+        }
+    }
+
+    private fun applyVaultChange(label: String, change: VaultStorage.Change) {
+        applyChange(label) { paths ->
+            EkBackup.EditPlan(paths, vaultChange = change)
+        }
+    }
+
+    private fun askVaultItemQuantity(
+        heading: String, item: ItemCatalog.Item,
+        limitToOne: Boolean = false, onReady: (Int) -> Unit
+    ) {
+        val field = number("Quantidade", "1")
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(7), dp(16), dp(7))
+            addView(text(if (!ItemRules.isStackable(item.id))
+                "Item não empilhável: cada unidade ocupa um espaço próprio."
+            else "Quantidade máxima por pilha: 999.", 12f,
+                if (!ItemRules.isStackable(item.id)) NON_STACKABLE_RED else MUTED))
+            addView(field, margin(4, 5))
+        }
+        AlertDialog.Builder(this).setTitle(heading)
+            .setView(wrapper)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Continuar") { _, _ ->
+                try {
+                    val max = if (limitToOne) ItemRules.maxPerSlot(item.id) else 999
+                    val amount = numberValue(field, "Quantidade do baú", max.toLong(), 1).toInt()
+                    onReady(amount)
+                } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
+            }.show()
+    }
+
+    private fun addIntoVaultSpace(
+        vault: Int, index: Int, item: ItemCatalog.Item, count: Int
+    ) {
+        val bySave = selectedVaultData()
+        if (bySave.size != saves.size) return notifyError("O baú não existe em todos os saves")
+        val exists = bySave.values.any { it.slots[index].id != 0 }
+        if (exists) {
+            confirmVaultReplacement(vault, index, item, count)
+        } else {
+            applyVaultChange("Baú $vault: ${item.name} ×$count",
+                VaultStorage.Change(vault, VaultStorage.Action.INSERT,
+                    index = index, itemId = item.id, amount = count))
+        }
+    }
+
+    private fun confirmVaultReplacement(
+        vault: Int, index: Int, item: ItemCatalog.Item, amount: Int
+    ) {
+        if (!ItemRules.isStackable(item.id) && amount != 1) {
+            return notifyError("Substituir uma posição permite apenas uma unidade deste item. " +
+                "Para mais cópias, utilize espaços vazios.")
+        }
+        val expected = selectedVaultData().mapValues { (_, vaultInfo) -> vaultInfo.slots[index] }
+        if (expected.keys != saves.map { it.path }.toSet()) {
+            return notifyError("Baú $vault não encontrado nos quatro saves")
+        }
+        val review = expected.entries.joinToString("\n") { (path, slot) ->
+            val name = if (slot.id == 0) "(vazio)"
+                else "${catalog.name(slot.id)} ×${slot.count}"
+            "• ${path.substringAfterLast('/')}: $name"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Confirmar troca no Baú $vault")
+            .setMessage("Posição ${index + 1} receberá ${item.name} ×$amount em todos os saves.\n\n" +
+                "Itens que serão substituídos:\n$review\n\n" +
+                "Apenas esta posição será modificada em cada save.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar troca") { _, _ ->
+                applyVaultChange("Baú $vault: troca na posição ${index + 1}",
+                    VaultStorage.Change(vault, VaultStorage.Action.REPLACE,
+                        index = index, itemId = item.id, amount = amount,
+                        expectedByPath = expected))
+            }.show()
+    }
+
+    private fun showVaultSlotActions(
+        vault: Int, index: Int, slot: EkBackup.InventorySlot, label: String
+    ) {
+        val list = selectedVaultData()[previewSave()?.path]?.slots.orEmpty()
+        val occurrence = list.take(index + 1).count { it.id == slot.id } - 1
+        if (occurrence < 0) return notifyError("A posição do baú mudou; selecione novamente")
+        val stackable = ItemRules.isStackable(slot.id)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        layout.addView(text("Baú $vault · Espaço ${index + 1} · " +
+            if (stackable) "${slot.count} unidade(s)" else "Item unitário", 12f, MUTED))
+        lateinit var dialog: AlertDialog
+        fun option(name: String, handler: () -> Unit) {
+            layout.addView(action(name) { dialog.dismiss(); handler() }, margin(2, 4))
+        }
+        val item = ItemCatalog.Item(slot.id, label, "")
+        option(if (stackable) "＋  Adicionar unidades" else "＋  Duplicar cópia") {
+            askVaultItemQuantity("Adicionar $label", item) { n ->
+                applyVaultChange("Baú $vault: +$n $label",
+                    VaultStorage.Change(vault, VaultStorage.Action.ADD,
+                        index = index, itemId = slot.id, amount = n, occurrence = occurrence))
+            }
+        }
+        if (stackable) option("✎  Definir quantidade") {
+            askVaultItemQuantity("Definir quantidade de $label", item) { n ->
+                applyVaultChange("Baú $vault: $label ×$n",
+                    VaultStorage.Change(vault, VaultStorage.Action.SET,
+                        index = index, itemId = slot.id, amount = n, occurrence = occurrence))
+            }
+        }
+        option("🗑  Excluir cópia / pilha") {
+            AlertDialog.Builder(this)
+                .setTitle("Excluir $label do Baú $vault?")
+                .setMessage("Exclui a ocorrência selecionada do item em cada save onde existir. " +
+                    "As outras cópias e os outros baús serão preservados.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Excluir") { _, _ ->
+                    applyVaultChange("Baú $vault: excluído $label",
+                        VaultStorage.Change(vault, VaultStorage.Action.DELETE,
+                            index = index, itemId = slot.id, occurrence = occurrence))
+                }.show()
+        }
+        option("↔  Substituir por outro item") {
+            chooseCatalog(false) { replacement ->
+                askVaultItemQuantity("Substituir por ${replacement.name}", replacement, true) { n ->
+                    confirmVaultReplacement(vault, index, replacement, n)
+                }
+            }
+        }
+        dialog = AlertDialog.Builder(this).setTitle(label)
+            .setView(layout).setNegativeButton("Fechar", null).create()
+        dialog.show()
     }
 
     /** Representação visual fiel às posições reais, com símbolos genéricos por tipo de item. */
@@ -757,6 +1035,9 @@ class MainActivity : Activity() {
             skillCurrent.text = "Habilidades livres atuais: —"
             itemsCurrent.text = "Nenhum inventário carregado"
             inventoryGrid.removeAllViews()
+            vaultGrid.removeAllViews()
+            vaultSummary.text = "Importe EK.bak para consultar os baús."
+            vaultUnlockButton.visibility = View.GONE
             companionCard.visibility = View.GONE
             return
         }
@@ -787,6 +1068,7 @@ class MainActivity : Activity() {
             "${representative.inventorySlots.size} espaços • ${representative.freeSlots} livres neste save\n" +
             "Espaços livres mínimos entre todos os saves: $minimumFree"
         refreshInventoryGrid(representative)
+        refreshVaultPreview()
         val companions = saves.mapNotNull { it.companion }
         if (companions.isNotEmpty()) {
             val companion = representative.companion ?: companions.first()
