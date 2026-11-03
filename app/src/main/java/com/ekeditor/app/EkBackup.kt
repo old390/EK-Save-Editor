@@ -61,6 +61,16 @@ object EkBackup {
     )
     /** Novo item somente no espaço vazio indicado, em TODOS os saves. */
     data class SlotInsert(val index: Int, val itemId: Int, val count: Int)
+    /**
+     * Substituicao explicitamente confirmada pelo usuario, com imagem
+     * dos conteudos esperados de CADA save. Nunca substitua sem permissao.
+     */
+    data class SlotReplace(
+        val index: Int,
+        val itemId: Int,
+        val count: Int,
+        val expectedByPath: Map<String, InventorySlot>
+    )
     data class EditPlan(
         val targetPaths: Set<String>,
         val gold: Long? = null,
@@ -69,6 +79,7 @@ object EkBackup {
         val items: List<ItemAdd> = emptyList(),
         val slotEdits: List<SlotEdit> = emptyList(),
         val slotInserts: List<SlotInsert> = emptyList(),
+        val slotReplacements: List<SlotReplace> = emptyList(),
         val traitDelta: Int? = null,
         val skillDelta: Int? = null,
         val resetTraits: Boolean = false,
@@ -81,7 +92,7 @@ object EkBackup {
         fun validate() {
             require(targetPaths.isNotEmpty()) { "Backup sem saves" }
             require(gold != null || traitPoints != null || skillPoints != null || items.isNotEmpty() ||
-                slotEdits.isNotEmpty() || slotInserts.isNotEmpty() || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
+                slotEdits.isNotEmpty() || slotInserts.isNotEmpty() || slotReplacements.isNotEmpty() || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
                 companionSkillDelta != null || resetCompanionTraits || resetCompanionSkills) { "Nenhuma alteração selecionada" }
             require(gold == null || gold in 0..999_999_999) { "Ouro fora do intervalo" }
             require(traitPoints == null || traitPoints in 0..999) { "Atributos fora do intervalo" }
@@ -105,6 +116,14 @@ object EkBackup {
             for (insert in slotInserts) {
                 require(insert.index >= 0 && insert.itemId in 1..999_999 && insert.count in 1..999) {
                     "Dados de inserção inválidos"
+                }
+            }
+            for (replace in slotReplacements) {
+                require(replace.index >= 0 && replace.itemId in 1..999_999 && replace.count in 1..999) {
+                    "Substituição de item inválida"
+                }
+                require(replace.expectedByPath.keys == targetPaths) {
+                    "Inventários esperados não correspondem a todos os saves"
                 }
             }
         }
@@ -470,7 +489,20 @@ object EkBackup {
         }
         return changed
     }
-    private fun rewrite(text: String, plan: EditPlan): String {
+    /** Localiza um item pelo ID, inclusive quando ocupa outra posição em outro save. */
+    private fun locateItem(ids: List<Int>, units: List<Int>, edit: SlotEdit): Int? {
+        if (edit.index in ids.indices && ids[edit.index] == edit.expectedId) return edit.index
+        val sameId = ids.indices.filter { ids[it] == edit.expectedId }
+        if (sameId.isEmpty()) return null
+        val sameQuantity = sameId.filter { units[it] == edit.expectedCount }
+        val candidates = if (sameQuantity.isNotEmpty()) sameQuantity else sameId
+        require(candidates.size == 1) {
+            "Existem stacks repetidos do item ID ${edit.expectedId} neste save; escolha uma operação sem ambiguidade."
+        }
+        return candidates.single()
+    }
+
+    private fun rewrite(text: String, plan: EditPlan, path: String): String {
         val playerRange = playerBounds(text)
         var player = text.substring(playerRange)
         if (plan.gold != null) player = replaceNumber(player, goldPattern, plan.gold)
@@ -500,30 +532,27 @@ object EkBackup {
         if (skillValue != null) player = replaceNumber(player, skillPattern, skillValue)
         var modified = text.replaceRange(playerRange.first, playerRange.last + 1, player)
         modified = rewriteCompanion(modified, plan)
-        if (plan.items.isNotEmpty() || plan.slotEdits.isNotEmpty() || plan.slotInserts.isNotEmpty()) {
+        if (plan.items.isNotEmpty() || plan.slotEdits.isNotEmpty() || plan.slotInserts.isNotEmpty() || plan.slotReplacements.isNotEmpty()) {
             val pack = backpack(modified)
             val ids = numbers(pack.groupValues[2])
             val units = numbers(pack.groupValues[4])
             require(ids.size == units.size) { "Inventário incompatível" }
             for (edit in plan.slotEdits) {
-                val index = when {
-                    edit.index in ids.indices && ids[edit.index] == edit.expectedId -> edit.index
-                    else -> {
-                        val matches = ids.indices.filter { ids[it] == edit.expectedId }
-                        require(matches.isNotEmpty()) {
-                            "Item ID ${edit.expectedId} ausente em um dos saves. Nenhum save foi alterado."
-                        }
-                        val sameCount = matches.filter { units[it] == edit.expectedCount }
-                        val candidates = if (sameCount.isNotEmpty()) sameCount else matches
-                        require(candidates.size == 1) {
-                            "Mais de um stack igual no mesmo save; operação ambígua e cancelada."
-                        }
-                        candidates.single()
+                val index = locateItem(ids, units, edit)
+                if (index == null) {
+                    // O item do save de referência ainda pode não existir em outro
+                    // save. Inserir nele sem apagar outros itens, se houver espaço.
+                    if (edit.quantity == 0) continue
+                    val free = ids.indexOf(0)
+                    require(free >= 0) {
+                        "Inventário cheio em $path e item ID ${edit.expectedId} ausente. " +
+                            "Para substituir um item, escolha explicitamente um espaço na grade."
                     }
-                }
-                if (edit.addQuantity) {
+                    ids[free] = edit.expectedId
+                    units[free] = edit.quantity
+                } else if (edit.addQuantity) {
                     require(units[index].toLong() + edit.quantity <= 999L) {
-                        "Quantidade ultrapassaria 999 neste save; nenhuma alteração realizada"
+                        "A quantidade do item ultrapassaria 999 em $path"
                     }
                     units[index] += edit.quantity
                 } else if (edit.quantity == 0) {
@@ -535,16 +564,31 @@ object EkBackup {
             }
             for (insert in plan.slotInserts) {
                 require(insert.index in ids.indices && ids[insert.index] == 0) {
-                    "Espaço ${insert.index + 1} não está vazio em todos os saves. Escolha outro espaço ou use a busca."
+                    "Espaço ${insert.index + 1} está ocupado em $path. " +
+                        "Para substituir, confirme os itens que serão removidos na grade."
                 }
                 ids[insert.index] = insert.itemId
                 units[insert.index] = insert.count
             }
             for ((id, count) in plan.items) {
                 val slot = ids.indexOf(id).takeIf { it >= 0 } ?: ids.indexOf(0)
-                require(slot >= 0) { "Inventário cheio! Não foi removido nenhum item. Libere espaço no jogo antes de adicionar." }
+                require(slot >= 0) {
+                    "Inventário cheio em $path. O item não foi adicionado. " +
+                        "Escolha um espaço para substituir com confirmação."
+                }
                 ids[slot] = id
                 units[slot] = count
+            }
+            for (replacement in plan.slotReplacements) {
+                val expected = replacement.expectedByPath[path]
+                    ?: error("Save não previsto na confirmação: $path")
+                require(replacement.index in ids.indices) { "Espaço inválido em $path" }
+                val i = replacement.index
+                require(ids[i] == expected.id && units[i] == expected.count) {
+                    "O espaço ${i + 1} mudou em $path desde a confirmação; nenhuma substituição feita."
+                }
+                ids[i] = replacement.itemId
+                units[i] = replacement.count
             }
             val parts = pack.groupValues
             val patched = parts[1] + ids.joinToString(", ", " ", " ") +
@@ -570,7 +614,7 @@ object EkBackup {
                 val content = if (source.entry.name in plan.targetPaths) {
                     require(savePath.matches(source.entry.name)) { "Caminho inválido" }
                     modifiedNames += source.entry.name
-                    Base64.getEncoder().encode(rewrite(plain(source.contents), plan).toByteArray(StandardCharsets.UTF_8))
+                    Base64.getEncoder().encode(rewrite(plain(source.contents), plan, source.entry.name).toByteArray(StandardCharsets.UTF_8))
                 } else source.contents
                 zip.write(content)
                 zip.closeEntry()
@@ -631,25 +675,26 @@ object EkBackup {
                         require(now.companion?.freeSkillPoints == prev.companion.freeSkillPoints + plan.companionSkillDelta)
                 }
                 for (edit in plan.slotEdits) {
-                    val prevStacks = prev.inventorySlots.filter { it.id == edit.expectedId }
-                    val nextStacks = now.inventorySlots.filter { it.id == edit.expectedId }
-                    require(prevStacks.size - (if (edit.quantity == 0) 1 else 0) == nextStacks.size) {
-                        "Quantidade de stacks não confere após edição do inventário"
-                    }
+                    val originalIds = prev.inventorySlots.map { it.id }
+                    val originalCounts = prev.inventorySlots.map { it.count }
+                    val oldIndex = locateItem(originalIds, originalCounts, edit)
+                    val oldCount = oldIndex?.let { prev.inventorySlots[it].count } ?: 0
                     val oldTotal = prev.inventory[edit.expectedId] ?: 0
                     val newTotal = now.inventory[edit.expectedId] ?: 0
-                    val selectedStack = prev.inventorySlots.getOrNull(edit.index)
-                    val effectiveCount = if (selectedStack?.id == edit.expectedId) selectedStack.count else {
-                        val sameCount = prevStacks.filter { it.count == edit.expectedCount }
-                        if (sameCount.size == 1) edit.expectedCount else {
-                            require(prevStacks.size == 1) { "Stack do item ambíguo" }
-                            prevStacks.single().count
-                        }
+                    val expectedTotal = when {
+                        oldIndex == null && edit.quantity == 0 -> oldTotal
+                        oldIndex == null -> oldTotal + edit.quantity
+                        edit.addQuantity -> oldTotal + edit.quantity
+                        else -> oldTotal - oldCount + edit.quantity
                     }
-                    val expectedTotal = if (edit.addQuantity) oldTotal + edit.quantity
-                        else oldTotal - effectiveCount + edit.quantity
                     require(newTotal == expectedTotal) {
-                        "Falha ao validar quantidade do item ID ${edit.expectedId}"
+                        "Quantidade do ID ${edit.expectedId} divergiu em ${prev.path}"
+                    }
+                    // Sem substituição explícita, nenhum outro ID pode desaparecer.
+                    for ((id, amount) in prev.inventory) if (id != edit.expectedId) {
+                        require(now.inventory[id] == amount) {
+                            "Outro item foi alterado inesperadamente em ${prev.path}"
+                        }
                     }
                 }
                 for (insert in plan.slotInserts) {
@@ -658,6 +703,22 @@ object EkBackup {
                     require(beforeSlot?.id == 0 && afterSlot?.id == insert.itemId &&
                         afterSlot.count == insert.count) {
                         "Novo item não foi gravado no espaço ${insert.index + 1}"
+                    }
+                }
+                for (replacement in plan.slotReplacements) {
+                    val expected = replacement.expectedByPath[prev.path]
+                        ?: error("Sem confirmação para ${prev.path}")
+                    require(prev.inventorySlots.getOrNull(replacement.index) == expected) {
+                        "Os inventários mudaram desde a confirmação"
+                    }
+                    val targetSlot = now.inventorySlots.getOrNull(replacement.index)
+                    require(targetSlot?.id == replacement.itemId && targetSlot.count == replacement.count) {
+                        "Substituição não foi gravada em ${prev.path}"
+                    }
+                    prev.inventorySlots.indices.filter { it != replacement.index }.forEach { i ->
+                        require(prev.inventorySlots[i] == now.inventorySlots[i]) {
+                            "Outra posição foi alterada inesperadamente em ${prev.path}"
+                        }
                     }
                 }
                 for (item in plan.items) require(now.inventory[item.id] == item.count) { "Item não aplicado" }
