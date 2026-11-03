@@ -73,10 +73,16 @@ jobs:
           fi
           TAG="v$VERSION"
           APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="app/build/outputs/apk/debug/EK-Save-Editor-v0.8.0-debug.apk"
+          cp "$APK" "$RELEASE_APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists. Keeping existing published assets."
+            # Asset labels are not filenames; publish an actual renamed copy.
+            gh release upload "$TAG" "$RELEASE_APK" --clobber
+            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "app-debug.apk"; then
+              gh release delete-asset "$TAG" "app-debug.apk" --yes
+            fi
           else
-            gh release create "$TAG" "$APK#EK-Save-Editor-v0.8.0-debug.apk" \
+            gh release create "$TAG" "$RELEASE_APK" \
               --target "$GITHUB_SHA" \
               --title "EK Save Editor v0.8.0 - US English" \
               --notes-file RELEASE_NOTES.md
