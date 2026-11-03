@@ -172,7 +172,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.5.0", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.5.1", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -194,7 +194,7 @@ class MainActivity : Activity() {
         inventory.addView(itemsCurrent, margin(0, 7))
         inventoryGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         inventory.addView(inventoryGrid, margin(1, 5))
-        inventory.addView(text("Ícones simbólicos de categorias. Toque em um item ocupado para alterar a quantidade ou excluí-lo de todos os saves. A edição será bloqueada se houver risco de modificar um item diferente.", 11f, MUTED), margin(4, 12))
+        inventory.addView(text("Ícones simbólicos (não oficiais). Toque num item para somar quantidade, definir quantidade ou excluir. Toque num espaço vazio para adicionar um item do catálogo. As ações são verificadas em todos os saves.", 11f, MUTED), margin(4, 12))
         inventory.addView(text("Adicionar item do catálogo", 13f, GOLD, true))
         itemSelectionLabel = text("Nenhum item selecionado", 13f, TEXT)
         inventory.addView(itemSelectionLabel, margin(7, 3))
@@ -349,7 +349,7 @@ class MainActivity : Activity() {
         inventoryGrid.removeAllViews()
         val slots = reference.inventorySlots
         fun iconFor(name: String, occupied: Boolean): String {
-            if (!occupied) return "·"
+            if (!occupied) return "＋"
             val n = name.lowercase()
             return when {
                 listOf("potion", "elixir", "medipack", "flask", "draught", "mead", "rum", "venom", "apple", "omelette").any { n.contains(it) } -> "🧪"
@@ -372,8 +372,9 @@ class MainActivity : Activity() {
                     background = shape(if (occupied) Color.rgb(43, 50, 57) else Color.rgb(15, 22, 27),
                         if (occupied) Color.rgb(150, 117, 73) else Color.rgb(48, 58, 62))
                     contentDescription = "Espaço ${index + 1}: $label"
-                    if (occupied) setOnClickListener {
-                        showInventorySlotActions(index, slot, label)
+                    setOnClickListener {
+                        if (occupied) showInventorySlotActions(index, slot, label)
+                        else chooseCatalog(false) { item -> showInsertIntoSlot(index, item) }
                     }
                 }
                 tile.addView(text(iconFor(label, occupied), 26f, if (occupied) TEXT else MUTED).apply {
@@ -397,49 +398,79 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Abre o catálogo a partir de uma célula vazia da grade. */
+    private fun showInsertIntoSlot(index: Int, item: ItemCatalog.Item) {
+        val input = number("Quantidade", "1")
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+            addView(text(item.name, 13f, GOLD, true))
+            addView(input, margin(7, 2))
+        }
+        AlertDialog.Builder(this).setTitle("Adicionar item ao espaço ${index + 1}")
+            .setMessage("O espaço escolhido precisa estar vazio em todos os saves. O editor não substituirá itens existentes.")
+            .setView(wrapper)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Adicionar") { _, _ ->
+                try {
+                    val amount = numberValue(input, "Quantidade do novo item", 999, 1).toInt()
+                    applyChange("Adicionado ${item.name} × $amount no espaço ${index + 1}") { paths ->
+                        EkBackup.EditPlan(paths, slotInserts = listOf(EkBackup.SlotInsert(index, item.id, amount)))
+                    }
+                } catch (e: Exception) {
+                    notifyError(e.message ?: "Não foi possível adicionar o item")
+                }
+            }.show()
+    }
+
+    /** Os itens da grade são editados pelo ID, nunca pela posição de outro item. */
     private fun showInventorySlotActions(index: Int, slot: EkBackup.InventorySlot, label: String) {
         AlertDialog.Builder(this)
             .setTitle(label)
-            .setMessage("Espaço ${index + 1}. Quantidade atual: ${slot.count}.\n" +
-                "A edição será aplicada ao mesmo item em todos os saves, mesmo se ele estiver em outra posição.")
-            .setItems(arrayOf("Alterar quantidade", "Excluir item")) { _, choice ->
+            .setMessage("Espaço ${index + 1}. Quantidade: ${slot.count}.\n" +
+                "O mesmo ID será procurado em todos os saves. A operação será cancelada se houver ambiguidade.")
+            .setItems(arrayOf("＋ Somar mais unidades", "✎ Definir quantidade", "🗑 Excluir item")) { _, choice ->
                 when (choice) {
-                    0 -> {
-                        val input = number("Nova quantidade", slot.count.toString())
+                    0, 1 -> {
+                        val isIncrement = choice == 0
+                        val input = number(
+                            if (isIncrement) "Quanto adicionar?" else "Nova quantidade",
+                            if (isIncrement) "1" else slot.count.toString()
+                        )
                         val wrapper = LinearLayout(this).apply {
                             orientation = LinearLayout.VERTICAL
                             setPadding(dp(18), dp(8), dp(18), dp(8))
-                            addView(text(label, 13f, MUTED))
+                            addView(text(label, 13f, GOLD, true))
                             addView(input, margin(5, 2))
                         }
-                        AlertDialog.Builder(this).setTitle("Alterar quantidade")
-                            .setMessage("O número informado substituirá a quantidade deste stack em todos os saves.")
+                        AlertDialog.Builder(this)
+                            .setTitle(if (isIncrement) "Somar unidades" else "Definir quantidade")
+                            .setMessage(if (isIncrement)
+                                "O valor digitado será SOMADO à quantidade existente em cada save (máximo 999 por stack)."
+                            else "O valor digitado substituirá a quantidade deste stack em cada save.")
                             .setView(wrapper)
                             .setNegativeButton("Cancelar", null)
                             .setPositiveButton("Aplicar") { _, _ ->
                                 try {
                                     val amount = numberValue(input, "Quantidade do item", 999, 1).toInt()
-                                    applyChange("Quantidade de $label → $amount") { paths ->
+                                    val operation = if (isIncrement) "Adicionadas +$amount unidades a $label"
+                                        else "Quantidade de $label definida em $amount"
+                                    applyChange(operation) { paths ->
                                         EkBackup.EditPlan(paths, slotEdits = listOf(
-                                            EkBackup.SlotEdit(index, slot.id, slot.count, amount)))
+                                            EkBackup.SlotEdit(index, slot.id, slot.count, amount, addQuantity = isIncrement)))
                                     }
-                                } catch (e: Exception) {
-                                    notifyError(e.message ?: "Quantidade inválida")
-                                }
+                                } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
                             }.show()
                     }
-                    1 -> {
-                        AlertDialog.Builder(this).setTitle("Excluir $label?")
-                            .setMessage("Será removido um stack desse item de cada save. " +
-                                "O programa verifica o ID antes de excluir e cancela tudo se não localizar o item.")
-                            .setNegativeButton("Cancelar", null)
-                            .setPositiveButton("Excluir") { _, _ ->
-                                applyChange("Exclusão de $label") { paths ->
-                                    EkBackup.EditPlan(paths, slotEdits = listOf(
-                                        EkBackup.SlotEdit(index, slot.id, slot.count, 0)))
-                                }
-                            }.show()
-                    }
+                    2 -> AlertDialog.Builder(this).setTitle("Excluir $label?")
+                        .setMessage("Remove um stack deste item em todos os saves. O programa confere os IDs e cancela se não for seguro.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Excluir") { _, _ ->
+                            applyChange("Excluído $label") { paths ->
+                                EkBackup.EditPlan(paths, slotEdits = listOf(
+                                    EkBackup.SlotEdit(index, slot.id, slot.count, 0)))
+                            }
+                        }.show()
                 }
             }.setNegativeButton("Fechar", null).show()
     }
@@ -449,7 +480,7 @@ class MainActivity : Activity() {
             .setMessage(message).setNegativeButton("Cancelar", null)
             .setPositiveButton("Zerar") { _, _ -> callback() }.show()
     }
-    private fun chooseCatalog(onlyPotions: Boolean) {
+    private fun chooseCatalog(onlyPotions: Boolean, onPicked: ((ItemCatalog.Item) -> Unit)? = null) {
         val dialogView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), 0)
@@ -478,9 +509,10 @@ class MainActivity : Activity() {
         })
         results.setOnItemClickListener { _, _, position, _ ->
             val chosen = displayed[position]
-            if (onlyPotions) { selectedPotion = chosen; potionSelectionLabel.text = chosen.name }
-            else { selectedItem = chosen; itemSelectionLabel.text = chosen.name }
             dialog.dismiss()
+            if (onPicked != null) onPicked(chosen)
+            else if (onlyPotions) { selectedPotion = chosen; potionSelectionLabel.text = chosen.name }
+            else { selectedItem = chosen; itemSelectionLabel.text = chosen.name }
         }
         refresh("")
         dialog.show()
