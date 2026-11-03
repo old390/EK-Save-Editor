@@ -8,6 +8,10 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
@@ -173,7 +177,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.5.3", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.5.4", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -366,35 +370,40 @@ class MainActivity : Activity() {
             for ((index, slot) in group) {
                 val occupied = slot.id != 0
                 val label = if (occupied) catalog.name(slot.id) else "Vazio"
-                val tile = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
+                // Button real: evita perder toques nos TextViews internos do antigo tile.
+                val glyph = iconFor(label, occupied)
+                val display = "$glyph\n$label" +
+                    if (occupied && slot.count > 1) "\n×${slot.count}" else ""
+                val styled = SpannableString(display).apply {
+                    setSpan(RelativeSizeSpan(1.6f), 0, glyph.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (occupied && !ItemRules.isStackable(slot.id)) {
+                        val begin = glyph.length + 1
+                        setSpan(ForegroundColorSpan(NON_STACKABLE_RED), begin,
+                            begin + label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+                val tile = Button(this).apply {
+                    text = styled
+                    textSize = 10f
+                    isAllCaps = false
                     gravity = Gravity.CENTER
-                    setPadding(dp(3), dp(4), dp(3), dp(4))
+                    maxLines = 4
+                    ellipsize = TextUtils.TruncateAt.END
+                    minHeight = 0
+                    minimumHeight = 0
+                    minWidth = 0
+                    minimumWidth = 0
+                    setPadding(dp(3), dp(3), dp(3), dp(3))
+                    setTextColor(if (occupied) TEXT else MUTED)
                     background = shape(if (occupied) Color.rgb(43, 50, 57) else Color.rgb(15, 22, 27),
                         if (occupied) Color.rgb(150, 117, 73) else Color.rgb(48, 58, 62))
-                    contentDescription = "Espaço ${index + 1}: $label"
-                    isClickable = true
-                    isFocusable = true
-                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                    contentDescription = "Espaço ${index + 1}: $label. Toque para opções."
                     setOnClickListener {
                         if (occupied) showInventorySlotActions(index, slot, label)
                         else chooseCatalog(false) { item -> showInsertIntoSlot(index, item) }
                     }
                 }
-                tile.addView(text(iconFor(label, occupied), 26f, if (occupied) TEXT else MUTED).apply {
-                    gravity = Gravity.CENTER
-                })
-                tile.addView(text(label, 10f,
-                    if (occupied && !ItemRules.isStackable(slot.id)) NON_STACKABLE_RED
-                    else if (occupied) TEXT else MUTED).apply {
-                    gravity = Gravity.CENTER
-                    maxLines = 2
-                    ellipsize = TextUtils.TruncateAt.END
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(32)))
-                if (occupied && slot.count > 1) tile.addView(text("×${slot.count}", 10f, GOLD, true).apply {
-                    gravity = Gravity.CENTER
-                })
-                row.addView(tile, LinearLayout.LayoutParams(0, dp(96), 1f).apply {
+                row.addView(tile, LinearLayout.LayoutParams(0, dp(112), 1f).apply {
                     setMargins(dp(2), dp(2), dp(2), dp(2))
                 })
             }
@@ -502,59 +511,94 @@ class MainActivity : Activity() {
             }.show()
     }
 
-    /** Os itens da grade são editados pelo ID, nunca pela posição de outro item. */
+    /**
+     * Não combina AlertDialog.setMessage com setItems: alguns aparelhos
+     * escondem as opções. Mostra quatro botões reais numa view customizada.
+     */
     private fun showInventorySlotActions(index: Int, slot: EkBackup.InventorySlot, label: String) {
-        AlertDialog.Builder(this)
-            .setTitle(label)
-            .setMessage("Espaço ${index + 1}. Quantidade: ${slot.count}.\n" +
-                "O mesmo ID será procurado em todos os saves. A operação será cancelada se houver ambiguidade.")
-            .setItems(arrayOf("＋ Somar mais unidades", "✎ Definir quantidade", "🗑 Excluir item", "↔ Substituir por outro item")) { _, choice ->
-                when (choice) {
-                    0, 1 -> {
-                        val isIncrement = choice == 0
-                        val input = number(
-                            if (isIncrement) "Quanto adicionar?" else "Nova quantidade",
-                            if (isIncrement) "1" else slot.count.toString()
-                        )
-                        val wrapper = LinearLayout(this).apply {
-                            orientation = LinearLayout.VERTICAL
-                            setPadding(dp(18), dp(8), dp(18), dp(8))
-                            addView(text(label, 13f, GOLD, true))
-                            addView(input, margin(5, 2))
+        val stackable = ItemRules.isStackable(slot.id)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(7), dp(18), dp(7))
+        }
+        val status = if (stackable)
+            "Espaço ${index + 1} · ${slot.count} unidade(s)\nEmpilhável: até 999 por espaço."
+        else
+            "Espaço ${index + 1} · Item unitário (1 por espaço).\nNovas cópias ocupam espaços separados."
+        layout.addView(text(status, 13f, MUTED), margin(0, 9))
+        lateinit var dialog: AlertDialog
+        fun option(labelText: String, handler: () -> Unit) {
+            layout.addView(action(labelText) {
+                dialog.dismiss()
+                handler()
+            }, margin(2, 4))
+        }
+        option(if (stackable) "＋  Adicionar mais unidades" else "＋  Adicionar outra cópia") {
+            val unitary = !stackable
+            val input = number(if (unitary) "Quantas cópias?" else "Quantas unidades?", "1")
+            val holder = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(8), dp(18), dp(8))
+                addView(text(if (unitary) "Cada cópia ocupará um espaço vazio em cada save."
+                             else "As unidades serão somadas ao stack em cada save.", 12f, MUTED))
+                addView(input, margin(4, 3))
+            }
+            AlertDialog.Builder(this)
+                .setTitle(if (unitary) "Adicionar cópias de $label" else "Somar unidades de $label")
+                .setView(holder)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Aplicar") { _, _ ->
+                    try {
+                        val amount = numberValue(input, "Quantidade", 999, 1).toInt()
+                        applyChange("+$amount ${if (unitary) "cópia(s)" else "unidade(s)"} de $label") { paths ->
+                            EkBackup.EditPlan(paths, slotEdits = listOf(
+                                EkBackup.SlotEdit(index, slot.id, slot.count, amount, addQuantity = true)))
                         }
-                        AlertDialog.Builder(this)
-                            .setTitle(if (isIncrement) "Somar unidades" else "Definir quantidade")
-                            .setMessage(if (isIncrement)
-                                "O valor digitado será SOMADO à quantidade existente em cada save (máximo 999 por stack)."
-                            else "O valor digitado substituirá a quantidade deste stack em cada save.")
-                            .setView(wrapper)
-                            .setNegativeButton("Cancelar", null)
-                            .setPositiveButton("Aplicar") { _, _ ->
-                                try {
-                                    val amount = numberValue(input, "Quantidade do item", 999, 1).toInt()
-                                    val operation = if (isIncrement) "Adicionadas +$amount unidades a $label"
-                                        else "Quantidade de $label definida em $amount"
-                                    applyChange(operation) { paths ->
-                                        EkBackup.EditPlan(paths, slotEdits = listOf(
-                                            EkBackup.SlotEdit(index, slot.id, slot.count, amount, addQuantity = isIncrement)))
-                                    }
-                                } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
-                            }.show()
+                    } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
+                }.show()
+        }
+        if (stackable) option("✎  Definir quantidade do stack") {
+            val input = number("Quantidade desejada", slot.count.toString())
+            val holder = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(7), dp(18), dp(7))
+                addView(text("O valor substituirá a quantidade do item em cada save.", 12f, MUTED))
+                addView(input, margin(4, 3))
+            }
+            AlertDialog.Builder(this).setTitle("Definir quantidade de $label")
+                .setView(holder)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Aplicar") { _, _ ->
+                    try {
+                        val amount = numberValue(input, "Quantidade", 999, 1).toInt()
+                        applyChange("Quantidade de $label = $amount") { paths ->
+                            EkBackup.EditPlan(paths, slotEdits = listOf(
+                                EkBackup.SlotEdit(index, slot.id, slot.count, amount)))
+                        }
+                    } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
+                }.show()
+        }
+        option("🗑  Excluir item") {
+            AlertDialog.Builder(this).setTitle("Excluir $label?")
+                .setMessage("Será removida uma ocorrência deste ID em cada save onde existir. " +
+                    "Nenhum item diferente será removido.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Excluir") { _, _ ->
+                    applyChange("Excluído $label") { paths ->
+                        EkBackup.EditPlan(paths, slotEdits = listOf(
+                            EkBackup.SlotEdit(index, slot.id, slot.count, 0)))
                     }
-                    2 -> AlertDialog.Builder(this).setTitle("Excluir $label?")
-                        .setMessage("Remove um stack deste ID onde ele existir. Os demais itens são preservados.")
-                        .setNegativeButton("Cancelar", null)
-                        .setPositiveButton("Excluir") { _, _ ->
-                            applyChange("Excluído $label") { paths ->
-                                EkBackup.EditPlan(paths, slotEdits = listOf(
-                                    EkBackup.SlotEdit(index, slot.id, slot.count, 0)))
-                            }
-                        }.show()
-                    3 -> chooseCatalog(false) { item ->
-                        showReplacementQuantity(index, item)
-                    }
-                }
-            }.setNegativeButton("Fechar", null).show()
+                }.show()
+        }
+        option("↔  Substituir por outro item") {
+            chooseCatalog(false) { item -> showReplacementQuantity(index, item) }
+        }
+        dialog = AlertDialog.Builder(this)
+            .setTitle(label)
+            .setView(layout)
+            .setNegativeButton("Fechar", null)
+            .create()
+        dialog.show()
     }
 
     private fun showReplacementQuantity(index: Int, item: ItemCatalog.Item) {
