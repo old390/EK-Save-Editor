@@ -150,7 +150,12 @@ class MainActivity : Activity() {
                 if (primary) Color.rgb(118, 160, 95) else Color.rgb(90, 101, 104))
             setOnClickListener { callback() }
         }
-    private fun editAction(label: String, callback: () -> Unit): Button = action(label, true, callback).also {
+    private fun editAction(label: String, callback: () -> Unit): Button = action(label, true, {
+        // Captura valores inválidos antes de encerrar a Activity: o usuário recebe um aviso.
+        try { callback() } catch (e: Exception) {
+            notifyError(e.message ?: "Verifique os valores antes de aplicar.")
+        }
+    }).also {
         it.isEnabled = false; editButtons += it
     }
     private fun createInterface() {
@@ -165,7 +170,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.4.1", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -244,7 +249,12 @@ class MainActivity : Activity() {
         skills.addView(editAction("+  Somar pontos de habilidades") {
             val amount = numberValue(skillDeltaInput, "Habilidades", 999, 1).toInt()
             applyChange("+$amount habilidades") { paths -> EkBackup.EditPlan(paths, skillDelta = amount) }
-        }, margin(4, 0))
+        }, margin(4, 6))
+        skills.addView(editAction("↺  Zerar pontos livres de habilidades") {
+            confirmReset("Zerar os pontos livres de habilidades do personagem em todos os saves?") {
+                applyChange("Habilidades zeradas") { paths -> EkBackup.EditPlan(paths, resetSkills = true) }
+            }
+        })
         body.addView(skills, margin(0, 12))
 
         companionCard = section("🛡️  Companheiro ativo", "Só são mostrados os atributos e habilidades do companheiro ativo. Aplicar soma pontos em todos os saves em que ele estiver ativo.")
@@ -270,7 +280,12 @@ class MainActivity : Activity() {
         companionCard.addView(editAction("+  Somar habilidades do companheiro") {
             val n = numberValue(companionSkillInput, "Habilidades do companheiro", 999, 1).toInt()
             applyChange("+$n habilidades do companheiro") { paths -> EkBackup.EditPlan(paths, companionSkillDelta = n) }
-        }, margin(4, 0))
+        }, margin(4, 6))
+        companionCard.addView(editAction("↺  Zerar habilidades livres do companheiro") {
+            confirmReset("Zerar os pontos livres de habilidades do companheiro ativo em todos os saves?") {
+                applyChange("Habilidades do companheiro zeradas") { paths -> EkBackup.EditPlan(paths, resetCompanionSkills = true) }
+            }
+        })
         companionCard.visibility = View.GONE
         body.addView(companionCard, margin(0, 4))
         body.addView(text("Quando houver um companheiro ativo no backup, os campos de atributos e habilidades dele aparecerão aqui.", 12f, MUTED), margin(4, 12))
@@ -344,9 +359,9 @@ class MainActivity : Activity() {
             .setMessage(message).setPositiveButton("Entendi", null).show()
     }
     private fun numberValue(field: EditText, label: String, max: Long, min: Long = 0): Long {
-        val n = field.text.toString().trim().toLongOrNull() ?: error("Informe um número em '$label'")
-        require(n in min..max) { "$label precisa estar entre $min e $max" }
-        return n
+        val raw = field.text.toString()
+        if (raw.isBlank()) field.error = "Digite um valor antes de aplicar"
+        return EkBackup.parseNumberInput(raw, label, max, min)
     }
     private fun allPaths(): Set<String> {
         require(saves.isNotEmpty()) { "Importe EK.bak antes" }
