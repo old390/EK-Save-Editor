@@ -122,15 +122,15 @@ object EkBackup {
             require(gold != null || traitPoints != null || skillPoints != null || items.isNotEmpty() ||
                 slotEdits.isNotEmpty() || slotInserts.isNotEmpty() || slotReplacements.isNotEmpty() || vaultChange != null || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
                 companionSkillDelta != null || resetCompanionTraits || resetCompanionSkills) { "No changes selected" }
-            require(gold == null || gold in 0..999_999_999) { "Gold fora do intervalo" }
-            require(traitPoints == null || traitPoints in 0..999) { "Attributes fora do intervalo" }
-            require(skillPoints == null || skillPoints in 0..999) { "Skills fora do intervalo" }
+            require(gold == null || gold in 0..999_999_999) { "Gold is out of range" }
+            require(traitPoints == null || traitPoints in 0..999) { "Attribute points are out of range" }
+            require(skillPoints == null || skillPoints in 0..999) { "Skill points are out of range" }
             require(listOf(traitPoints != null, traitDelta != null, resetTraits).count { it } <= 1) { "Choose only one attribute editing action" }
             require(listOf(skillPoints != null, skillDelta != null, resetSkills).count { it } <= 1) { "Choose only one skill editing action" }
-            require(!(resetCompanionTraits && companionTraitDelta != null)) { "Escolha zerar ou adicionar atributos do companheiro" }
-            require(!(resetCompanionSkills && companionSkillDelta != null)) { "Escolha zerar ou adicionar habilidades do companheiro" }
+            require(!(resetCompanionTraits && companionTraitDelta != null)) { "Choose either reset or add companion attributes" }
+            require(!(resetCompanionSkills && companionSkillDelta != null)) { "Choose either reset or add companion skills" }
             for (n in listOf(traitDelta, skillDelta, companionTraitDelta, companionSkillDelta)) {
-                require(n == null || n in 1..999) { "Acrescente entre 1 e 999 pontos" }
+                require(n == null || n in 1..999) { "Add between 1 and 999 points" }
             }
             for (item in items) {
                 require(item.id in 1..999_999 && item.count in 1..999) { "Invalid item ID or quantity" }
@@ -224,7 +224,7 @@ object EkBackup {
     }
     private fun playerBounds(text: String): IntRange {
         val gamedata = text.indexOf("\ngamedata: {")
-        require(gamedata >= 0) { "Dados do personagem ausentes" }
+        require(gamedata >= 0) { "Character data is missing" }
         return block(text, "\n\tplayer: {", gamedata) ?: error("Character not found")
     }
     private fun one(text: String, pattern: Regex, key: String): Int = pattern.find(text)?.groupValues?.get(2)?.toInt()
@@ -484,7 +484,7 @@ object EkBackup {
         if (reset) return 0
         if (points == null) return null
         val result = current.toLong() + points
-        require(result in 0..999) { "$name excede 999 pontos livres" }
+        require(result in 0..999) { "$name exceeds 999 bonus points" }
         return result.toInt()
     }
     private fun rewriteCompanion(text: String, plan: EditPlan): String {
@@ -499,14 +499,14 @@ object EkBackup {
             val newBonus = balance.spent - balance.byLevel
             require(newBonus in 0..999) { "Cannot safely reset attribute points without changing allocated points" }
             newBonus
-        } else increment(traitBonus, plan.companionTraitDelta, false, "Attributes do companheiro")
+        } else increment(traitBonus, plan.companionTraitDelta, false, "Companion attributes")
         val skill = if (plan.resetCompanionSkills) {
             val balance = skillBalance(currentParty, true)
                 ?: error("Could not identify learned companion skills. Reset canceled.")
             val newBonus = balance.spent - balance.byLevel
             require(newBonus in 0..999) { "Cannot safely reset skill points without removing learned skill ranks" }
             newBonus
-        } else increment(skillBonus, plan.companionSkillDelta, false, "Skills do companheiro")
+        } else increment(skillBonus, plan.companionSkillDelta, false, "Companion skills")
         val blocks = mutableListOf(partyRange)
         // NPC copy of the active companion is kept consistent with party.companions.
         val gameData = block(text, "\ngamedata: {")
@@ -641,7 +641,7 @@ object EkBackup {
                     }
                 } else if (edit.addQuantity) {
                     require(units[index].toLong() + edit.quantity <= 999) {
-                        "O item passaria de 999 unidades em $path"
+                        "The item stack would exceed 999 units in $path"
                     }
                     units[index] += edit.quantity
                 } else if (edit.quantity == 0) {
@@ -654,7 +654,7 @@ object EkBackup {
             }
             for (insert in plan.slotInserts) {
                 require(insert.index in ids.indices && ids[insert.index] == 0) {
-                    "Espaço ${insert.index + 1} is occupied in $path; choose a confirmed replacement."
+                    "Slot ${insert.index + 1} is occupied in $path; choose a confirmed replacement."
                 }
                 if (!ItemRules.isStackable(insert.itemId)) {
                     addSingleCopies(ids, units, insert.itemId, insert.count, path, insert.index)
@@ -701,7 +701,7 @@ object EkBackup {
         plan.validate()
         val before = archive(data)
         val parsedBefore = inspect(data)
-        require(plan.targetPaths.all { path -> parsedBefore.any { it.path == path } }) { "Save escolhido ausente" }
+        require(plan.targetPaths.all { path -> parsedBefore.any { it.path == path } }) { "Selected save is missing" }
         val selectedSlots = parsedBefore.filter { it.path in plan.targetPaths }
             .map { it.characterSlot }.toSet()
         require(selectedSlots.size == 1) {
@@ -759,14 +759,14 @@ object EkBackup {
                 }
                 if (plan.traitDelta != null) {
                     require(now.traitPoints == prev.traitPoints + plan.traitDelta) {
-                        "Falha ao somar extras em ${prev.path}"
+                        "Could not add bonus points in ${prev.path}"
                     }
                     if (prev.freeTraitPoints != null) {
                         require(now.freeTraitPoints == prev.freeTraitPoints + plan.traitDelta) {
                             "Available points did not increase as expected in ${prev.path}"
                         }
                         require(now.spentTraitPoints == prev.spentTraitPoints) {
-                            "Os pontos gastos foram alterados inesperadamente"
+                            "Spent points were unexpectedly modified"
                         }
                     }
                 }
@@ -807,12 +807,12 @@ object EkBackup {
                         else -> oldTotal - oldCount + edit.quantity
                     }
                     require(newTotal == expectedTotal) {
-                        "Quantidade do ID ${edit.expectedId} divergiu em ${prev.path}"
+                        "Quantity of item ID ${edit.expectedId} did not match in ${prev.path}"
                     }
                     // Without an explicit replacement, no other item ID may disappear.
                     for ((id, amount) in prev.inventory) if (id != edit.expectedId) {
                         require(now.inventory[id] == amount) {
-                            "Outro item foi alterado inesperadamente em ${prev.path}"
+                            "Another item was unexpectedly modified in ${prev.path}"
                         }
                     }
                 }
