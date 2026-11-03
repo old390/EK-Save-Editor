@@ -49,7 +49,30 @@ object EkBackup {
         val spentTraitPoints: Int? = null,
         val freeSkillPoints: Int? = null,
         val spentSkillPoints: Int? = null
+    ) {
+        /** Os grupos de saves/0, saves/1, saves/2... são personagens separados. */
+        val characterSlot: Int
+            get() = path.substringAfter("saves/").substringBefore('/').toInt()
+    }
+
+    data class CharacterInfo(
+        val slot: Int,
+        val name: String,
+        val characterClass: String,
+        val level: Int?,
+        val savePaths: Set<String>
     )
+
+    /** A ordem dos personagens é dada pelas pastas, não pelo nome nem pela quantidade de arquivos. */
+    fun characters(saves: List<SaveInfo>): List<CharacterInfo> =
+        saves.groupBy { it.characterSlot }.toSortedMap().map { (slot, group) ->
+            val primary = group.firstOrNull { it.path.endsWith("/auto.sav") }
+                ?: group.firstOrNull { it.path.endsWith("/game.sav") }
+                ?: group.first()
+            CharacterInfo(slot, primary.hero, primary.characterClass,
+                primary.characterLevel, group.map { it.path }.toSet())
+        }
+
     /** Item na posição real do inventário, preservando inclusive espaços vazios. */
     data class InventorySlot(val id: Int, val count: Int)
     data class ItemAdd(val id: Int, val count: Int = 1)
@@ -225,7 +248,8 @@ object EkBackup {
         val points = raw.split(',').map { it.trim().toIntOrNull() ?: return null }
         if (points.size != 6 || points.any { it < 0 }) return null
         val spent = points.sum()
-        val extra = one(player, traitPattern, "atributos extras")
+        // A ficha de um herói recém-criado pode não ter extraTraitPoints.
+        val extra = traitPattern.find(player)?.groupValues?.get(2)?.toIntOrNull() ?: 0
         val byLevel = traitPointsFromLevel(level)
         return TraitBalance(level, byLevel, extra, spent, byLevel + extra - spent)
     }
@@ -431,8 +455,8 @@ object EkBackup {
             hero = Regex("""(?m)^\t\tname: (.*)$""").find(player)?.groupValues?.get(1)?.trim() ?: "Personagem",
             characterClass = Regex("""(?m)^\t{4}characterClass: (\w+)\s*$""").find(player)?.groupValues?.get(1) ?: "?",
             gold = gold(player),
-            traitPoints = one(player, traitPattern, "atributos"),
-            skillPoints = one(player, skillPattern, "habilidades"),
+            traitPoints = traitPattern.find(player)?.groupValues?.get(2)?.toIntOrNull() ?: 0,
+            skillPoints = skillPattern.find(player)?.groupValues?.get(2)?.toIntOrNull() ?: 0,
             freeSlots = ids.count { it == 0 },
             inventory = ids.zip(units).filter { it.first > 0 }
                 .groupBy({ it.first }, { it.second }).mapValues { (_, amounts) -> amounts.sum() },
@@ -565,7 +589,10 @@ object EkBackup {
                 }
                 requiredExtra
             }
-            else -> increment(one(player, traitPattern, "atributos extras"), plan.traitDelta, false, "Atributos")
+            else -> increment(
+                traitPattern.find(player)?.groupValues?.get(2)?.toIntOrNull() ?: 0,
+                plan.traitDelta, false, "Atributos"
+            )
         }
         val skillValue = if (plan.skillPoints != null) plan.skillPoints else if (plan.resetSkills) {
             val balance = skillBalance(player, false)
@@ -575,9 +602,14 @@ object EkBackup {
                 "Não é possível zerar pontos livres sem remover habilidades já aprendidas"
             }
             newBonus
-        } else increment(one(player, skillPattern, "habilidades"), plan.skillDelta, false, "Habilidades")
-        if (traitValue != null) player = replaceNumber(player, traitPattern, traitValue)
-        if (skillValue != null) player = replaceNumber(player, skillPattern, skillValue)
+        } else increment(
+            skillPattern.find(player)?.groupValues?.get(2)?.toIntOrNull() ?: 0,
+            plan.skillDelta, false, "Habilidades"
+        )
+        if (traitValue != null)
+            player = updateBonusField(player, traitPattern, "extraTraitPoints", "traits: {", traitValue)
+        if (skillValue != null)
+            player = updateBonusField(player, skillPattern, "bonusPoints", "skillSet: {", skillValue)
         var modified = text.replaceRange(playerRange.first, playerRange.last + 1, player)
         modified = rewriteCompanion(modified, plan)
         if (plan.items.isNotEmpty() || plan.slotEdits.isNotEmpty() || plan.slotInserts.isNotEmpty() || plan.slotReplacements.isNotEmpty()) {
@@ -670,6 +702,11 @@ object EkBackup {
         val before = archive(data)
         val parsedBefore = inspect(data)
         require(plan.targetPaths.all { path -> parsedBefore.any { it.path == path } }) { "Save escolhido ausente" }
+        val selectedSlots = parsedBefore.filter { it.path in plan.targetPaths }
+            .map { it.characterSlot }.toSet()
+        require(selectedSlots.size == 1) {
+            "Escolha um único personagem antes de alterar os saves"
+        }
         val modifiedNames = mutableSetOf<String>()
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
