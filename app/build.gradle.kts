@@ -11,8 +11,8 @@ android {
         applicationId = "com.ekeditor.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "0.5.5"
+        versionCode = 15
+        versionName = "0.6.0"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
