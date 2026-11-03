@@ -172,7 +172,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.5.1", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.5.2", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -194,7 +194,7 @@ class MainActivity : Activity() {
         inventory.addView(itemsCurrent, margin(0, 7))
         inventoryGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         inventory.addView(inventoryGrid, margin(1, 5))
-        inventory.addView(text("Ícones simbólicos (não oficiais). Toque num item para somar quantidade, definir quantidade ou excluir. Toque num espaço vazio para adicionar um item do catálogo. As ações são verificadas em todos os saves.", 11f, MUTED), margin(4, 12))
+        inventory.addView(text("Toque em um item para somar, alterar a quantidade, excluir ou substituí-lo. Em um espaço vazio, escolha um item para inserir. Quando os saves tiverem itens diferentes ou o inventário estiver cheio, você poderá escolher uma substituição explícita antes de aplicar.", 11f, MUTED), margin(4, 12))
         inventory.addView(text("Adicionar item do catálogo", 13f, GOLD, true))
         itemSelectionLabel = text("Nenhum item selecionado", 13f, TEXT)
         inventory.addView(itemSelectionLabel, margin(7, 3))
@@ -204,7 +204,7 @@ class MainActivity : Activity() {
         inventory.addView(editAction("✓  Aplicar item em todos os saves") {
             val item = selectedItem ?: return@editAction notifyError("Escolha um item no catálogo")
             val amount = numberValue(itemAmount, "Quantidade", 999, 1).toInt()
-            applyChange("${item.name} × $amount") { paths -> EkBackup.EditPlan(paths, items = listOf(EkBackup.ItemAdd(item.id, amount))) }
+            addOrChooseReplacement(item, amount)
         }, margin(5, 10))
         inventory.addView(text("Adicionar poção ou consumível", 13f, GOLD, true))
         potionSelectionLabel = text("Nenhuma poção selecionada", 13f, TEXT)
@@ -215,9 +215,9 @@ class MainActivity : Activity() {
         inventory.addView(editAction("✓  Aplicar poção em todos os saves") {
             val item = selectedPotion ?: return@editAction notifyError("Escolha uma poção na lista")
             val amount = numberValue(potionAmount, "Quantidade", 999, 1).toInt()
-            applyChange("${item.name} × $amount") { paths -> EkBackup.EditPlan(paths, items = listOf(EkBackup.ItemAdd(item.id, amount))) }
+            addOrChooseReplacement(item, amount)
         }, margin(5, 9))
-        inventory.addView(text("⚠ Itens colocados com inventário cheio podem substituir itens existentes ou até causar perda do inventário. Confira os espaços livres antes de adicionar itens. O editor bloqueará a inserção quando não houver espaço disponível.", 12f, MUTED))
+        inventory.addView(text("⚠ Quando um save estiver cheio, a inserção simples será bloqueada. Você poderá escolher uma posição e confirmar quais itens serão substituídos em cada save. Nada será apagado automaticamente. Preserve o EK.bak original.", 12f, MUTED))
         body.addView(inventory, margin(0, 12))
 
         val gold = section("🪙  Ouro", "Defina a quantidade de ouro e toque em Aplicar. A mudança aparece imediatamente.")
@@ -372,6 +372,9 @@ class MainActivity : Activity() {
                     background = shape(if (occupied) Color.rgb(43, 50, 57) else Color.rgb(15, 22, 27),
                         if (occupied) Color.rgb(150, 117, 73) else Color.rgb(48, 58, 62))
                     contentDescription = "Espaço ${index + 1}: $label"
+                    isClickable = true
+                    isFocusable = true
+                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     setOnClickListener {
                         if (occupied) showInventorySlotActions(index, slot, label)
                         else chooseCatalog(false) { item -> showInsertIntoSlot(index, item) }
@@ -398,6 +401,73 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Se algum save estiver cheio E sem o item escolhido, a inserção sem
+     * perda é impossível. Exibe os espaços disponíveis para substituição.
+     */
+    private fun addOrChooseReplacement(item: ItemCatalog.Item, amount: Int) {
+        val blocked = saves.filter { item.id !in it.inventory && it.freeSlots == 0 }
+        if (blocked.isEmpty()) {
+            applyChange("${item.name} × $amount") { paths ->
+                EkBackup.EditPlan(paths, items = listOf(EkBackup.ItemAdd(item.id, amount)))
+            }
+            return
+        }
+        AlertDialog.Builder(this).setTitle("Inventário cheio em ${blocked.size} save(s)")
+            .setMessage("O item não existe e não há espaço disponível em: " +
+                blocked.joinToString(", ") { it.path.substringAfterLast("/") } +
+                ".\n\nVocê pode escolher uma posição da grade para substituir em todos os saves. " +
+                "O editor mostrará os itens que serão removidos antes de confirmar.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Escolher espaço") { _, _ ->
+                chooseReplacementSlot(item, amount)
+            }.show()
+    }
+
+    private fun chooseReplacementSlot(item: ItemCatalog.Item, amount: Int) {
+        val ref = previewSave() ?: return notifyError("Importe EK.bak primeiro")
+        val list = ref.inventorySlots.mapIndexed { idx, slot ->
+            "Espaço ${idx + 1}: " + if (slot.id == 0) "(vazio)" else
+                "${catalog.name(slot.id)} ×${slot.count}"
+        }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Escolher espaço para ${item.name}")
+            .setItems(list) { _, index -> confirmSlotReplacement(index, item, amount) }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
+    /**
+     * Atualiza a célula escolhida em todos os saves mesmo com inventários
+     * diferentes, somente após confirmação com resumo por arquivo.
+     */
+    private fun confirmSlotReplacement(index: Int, item: ItemCatalog.Item, amount: Int) {
+        val all = saves.associate { info ->
+            info.path to (info.inventorySlots.getOrNull(index)
+                ?: return notifyError("Espaço ${index + 1} não existe em ${info.path}"))
+        }
+        val overwritten = all.filterValues { it.id != 0 && it.id != item.id }
+        val preview = all.entries.joinToString("\n") { (path, slot) ->
+            val name = if (slot.id == 0) "(vazio)"
+                else "${catalog.name(slot.id)} ×${slot.count}"
+            "• ${path.substringAfterLast('/')}: $name"
+        }
+        val warning = if (overwritten.isNotEmpty()) {
+            "\n\nATENÇÃO: ${overwritten.size} save(s) perderão o item acima dessa posição."
+        } else "\n\nNenhum ID diferente será removido."
+        AlertDialog.Builder(this)
+            .setTitle("Confirmar espaço ${index + 1}")
+            .setMessage("O item ${item.name} ×$amount será colocado na posição ${index + 1} " +
+                "de TODOS os saves.\n\nConteúdo atual:\n$preview$warning" +
+                "\n\nO backup original não será modificado.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar substituição") { _, _ ->
+                applyChange("${item.name} ×$amount na posição ${index + 1}") { paths ->
+                    EkBackup.EditPlan(paths, slotReplacements = listOf(
+                        EkBackup.SlotReplace(index, item.id, amount, all)
+                    ))
+                }
+            }.show()
+    }
+
     /** Abre o catálogo a partir de uma célula vazia da grade. */
     private fun showInsertIntoSlot(index: Int, item: ItemCatalog.Item) {
         val input = number("Quantidade", "1")
@@ -408,18 +478,24 @@ class MainActivity : Activity() {
             addView(input, margin(7, 2))
         }
         AlertDialog.Builder(this).setTitle("Adicionar item ao espaço ${index + 1}")
-            .setMessage("O espaço escolhido precisa estar vazio em todos os saves. O editor não substituirá itens existentes.")
+            .setMessage("Se esta posição estiver ocupada em algum save, será exibida uma confirmação antes de substituí-la.")
             .setView(wrapper)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Adicionar") { _, _ ->
                 try {
                     val amount = numberValue(input, "Quantidade do novo item", 999, 1).toInt()
-                    applyChange("Adicionado ${item.name} × $amount no espaço ${index + 1}") { paths ->
-                        EkBackup.EditPlan(paths, slotInserts = listOf(EkBackup.SlotInsert(index, item.id, amount)))
+                    val occupiedSomewhere = saves.any { info ->
+                        info.inventorySlots.getOrNull(index)?.id != 0
                     }
-                } catch (e: Exception) {
-                    notifyError(e.message ?: "Não foi possível adicionar o item")
-                }
+                    if (occupiedSomewhere) {
+                        confirmSlotReplacement(index, item, amount)
+                    } else {
+                        applyChange("Adicionado ${item.name} ×$amount no espaço ${index + 1}") { paths ->
+                            EkBackup.EditPlan(paths, slotInserts = listOf(
+                                EkBackup.SlotInsert(index, item.id, amount)))
+                        }
+                    }
+                } catch (e: Exception) { notifyError(e.message ?: "Não foi possível adicionar o item") }
             }.show()
     }
 
@@ -429,7 +505,7 @@ class MainActivity : Activity() {
             .setTitle(label)
             .setMessage("Espaço ${index + 1}. Quantidade: ${slot.count}.\n" +
                 "O mesmo ID será procurado em todos os saves. A operação será cancelada se houver ambiguidade.")
-            .setItems(arrayOf("＋ Somar mais unidades", "✎ Definir quantidade", "🗑 Excluir item")) { _, choice ->
+            .setItems(arrayOf("＋ Somar mais unidades", "✎ Definir quantidade", "🗑 Excluir item", "↔ Substituir por outro item")) { _, choice ->
                 when (choice) {
                     0, 1 -> {
                         val isIncrement = choice == 0
@@ -463,7 +539,7 @@ class MainActivity : Activity() {
                             }.show()
                     }
                     2 -> AlertDialog.Builder(this).setTitle("Excluir $label?")
-                        .setMessage("Remove um stack deste item em todos os saves. O programa confere os IDs e cancela se não for seguro.")
+                        .setMessage("Remove um stack deste ID onde ele existir. Os demais itens são preservados.")
                         .setNegativeButton("Cancelar", null)
                         .setPositiveButton("Excluir") { _, _ ->
                             applyChange("Excluído $label") { paths ->
@@ -471,8 +547,30 @@ class MainActivity : Activity() {
                                     EkBackup.SlotEdit(index, slot.id, slot.count, 0)))
                             }
                         }.show()
+                    3 -> chooseCatalog(false) { item ->
+                        showReplacementQuantity(index, item)
+                    }
                 }
             }.setNegativeButton("Fechar", null).show()
+    }
+
+    private fun showReplacementQuantity(index: Int, item: ItemCatalog.Item) {
+        val input = number("Quantidade", "1")
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+            addView(text(item.name, 13f, GOLD, true))
+            addView(input, margin(5, 2))
+        }
+        AlertDialog.Builder(this).setTitle("Substituir espaço ${index + 1}")
+            .setView(wrapper)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Continuar") { _, _ ->
+                try {
+                    val amount = numberValue(input, "Quantidade", 999, 1).toInt()
+                    confirmSlotReplacement(index, item, amount)
+                } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
+            }.show()
     }
 
     private fun confirmReset(message: String, callback: () -> Unit) {
