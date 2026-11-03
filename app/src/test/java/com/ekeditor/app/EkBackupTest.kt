@@ -119,4 +119,52 @@ class EkBackupTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun refusesNonZipFiles() { EkBackup.inspect("not a backup".toByteArray()) }
+    @Test fun repeatedPointsAddAndResetAcrossAllSaves() {
+        val initial = fixture()
+        val paths = EkBackup.inspect(initial).map { it.path }.toSet()
+        val first = EkBackup.apply(initial, EkBackup.EditPlan(paths, traitDelta = 5, skillDelta = 2))
+        val second = EkBackup.apply(first, EkBackup.EditPlan(paths, traitDelta = 5, skillDelta = 2))
+        assertTrue(EkBackup.inspect(second).all { it.traitPoints == 12 && it.skillPoints == 7 })
+        val reset = EkBackup.apply(second, EkBackup.EditPlan(paths, resetTraits = true))
+        assertTrue(EkBackup.inspect(reset).all { it.traitPoints == 0 && it.skillPoints == 7 })
+    }
+
+    private fun companionSave(gold: Int): ByteArray = Base64.getEncoder().encode(
+        ("format: test\n" +
+         "version: 1.3.1219\n" +
+         "gamedata: {\n\tplayer: {\n\t\tname: Warrior\n\t\tgold: $gold\n" +
+         "\t\tcharacter: {\n\t\t\t\tcharacterClass: warrior\n\t\t\t\textraTraitPoints: 2\n\t\t\t\tbonusPoints: 3\n\t\t}\n\t}\n" +
+         "\tbackpack: {\n\t\titemList: [ 0, 0, 0, 0 ]\n\t\tstackUnits: [ 0, 0, 0, 0 ]\n\t}\n" +
+         "}\n" +
+         "\tparty: {\n\t\tactiveCompanion: grisenda\n\t\tcompanions: [\n\t\t\t{\n\t\t\t\tname: Grissenda\n\t\t\t\tspawn_id: grisenda\n" +
+         "\t\t\t\tsheet: {\n\t\t\t\t\ttraits: {\n\t\t\t\t\t\textraTraitPoints: 4\n\t\t\t\t\t}\n\t\t\t\t\tbonusPoints: 2\n\t\t\t\t}\n\t\t\t}\n\t\t]\n\t}\n"
+        ).toByteArray(Charsets.UTF_8)
+    )
+
+    @Test fun companionDetectionAndRepeatedPoints() {
+        val initial = ByteArrayOutputStream().also { output ->
+            ZipOutputStream(output).use { zip ->
+                zip.putNextEntry(ZipEntry("saves/0/game.sav"))
+                zip.write(companionSave(100))
+                zip.closeEntry()
+            }
+        }.toByteArray()
+        val target = setOf("saves/0/game.sav")
+        assertEquals("Grissenda", EkBackup.inspect(initial).single().companion?.name)
+        val once = EkBackup.apply(initial, EkBackup.EditPlan(target, companionTraitDelta = 7, companionSkillDelta = 5))
+        val twice = EkBackup.apply(once, EkBackup.EditPlan(target, companionTraitDelta = 7, companionSkillDelta = 5))
+        assertEquals(18, EkBackup.inspect(twice).single().companion?.traitPoints)
+        assertEquals(12, EkBackup.inspect(twice).single().companion?.skillPoints)
+        val reset = EkBackup.apply(twice, EkBackup.EditPlan(target, resetCompanionTraits = true))
+        assertEquals(0, EkBackup.inspect(reset).single().companion?.traitPoints)
+        assertEquals(2, EkBackup.inspect(reset).single().traitPoints)
+    }
+
+    @Test fun noCompanionDoesNotCreateOne() {
+        val paths = EkBackup.inspect(fixture()).map { it.path }.toSet()
+        assertTrue(EkBackup.inspect(fixture()).all { it.companion == null })
+        val changed = EkBackup.apply(fixture(), EkBackup.EditPlan(paths, companionSkillDelta = 1))
+        assertTrue(EkBackup.inspect(changed).all { it.companion == null })
+    }
+
 }

@@ -3,30 +3,35 @@ package com.ekeditor.app
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.TextView
 
-/** Editor offline de EK.bak: alterações são confirmadas na memória e exportadas pelo usuário. */
+/** Offline EK.bak editor: all saves modified together; the original backup is preserved. */
 class MainActivity : Activity() {
     companion object {
         private const val REQUEST_OPEN = 100
         private const val REQUEST_EXPORT = 101
         private const val GAME_PATH = "/storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak"
+        private const val ORIGINAL_CACHE = "ek_session_original.bak"
+        private const val MODIFIED_CACHE = "ek_session_modified.bak"
         private val BG = Color.rgb(8, 13, 16)
         private val PANEL = Color.rgb(21, 27, 33)
         private val TEXT = Color.rgb(242, 237, 226)
@@ -34,55 +39,94 @@ class MainActivity : Activity() {
         private val GOLD = Color.rgb(201, 165, 108)
         private val GREEN = Color.rgb(40, 106, 67)
     }
-
     private var originalBytes: ByteArray? = null
     private var editedBytes: ByteArray? = null
     private var pendingExport: ByteArray? = null
-    private var saves: List<EkBackup.SaveInfo> = emptyList()
+    private var saves = emptyList<EkBackup.SaveInfo>()
     private var appliedChanges = 0
-    private var lastAppliedItem: Int? = null
-    private var refreshingSelection = false
+    private lateinit var catalog: ItemCatalog
+    private var selectedItem: ItemCatalog.Item? = null
+    private var selectedPotion: ItemCatalog.Item? = null
     private val editButtons = mutableListOf<Button>()
 
     private lateinit var status: TextView
     private lateinit var sourceDetails: TextView
-    private lateinit var slotSpinner: Spinner
     private lateinit var goldCurrent: TextView
     private lateinit var goldInput: EditText
     private lateinit var traitCurrent: TextView
-    private lateinit var traitInput: EditText
+    private lateinit var traitDeltaInput: EditText
     private lateinit var skillCurrent: TextView
-    private lateinit var skillInput: EditText
+    private lateinit var skillDeltaInput: EditText
+    private lateinit var companionCard: LinearLayout
+    private lateinit var companionTitle: TextView
+    private lateinit var companionTraitCurrent: TextView
+    private lateinit var companionSkillCurrent: TextView
+    private lateinit var companionTraitInput: EditText
+    private lateinit var companionSkillInput: EditText
     private lateinit var itemsCurrent: TextView
-    private lateinit var potionInput: EditText
-    private lateinit var customId: EditText
-    private lateinit var customAmount: EditText
+    private lateinit var itemSelectionLabel: TextView
+    private lateinit var potionSelectionLabel: TextView
+    private lateinit var itemAmount: EditText
+    private lateinit var potionAmount: EditText
     private lateinit var lastChange: TextView
     private lateinit var exportButton: Button
     private lateinit var originalButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        catalog = ItemCatalog(this)
         createInterface()
-        setStatus("Selecione um arquivo EK.bak para começar.", false)
+        if (savedInstanceState != null && savedInstanceState.getBoolean("has_session")) {
+            try {
+                val original = openFileInput(ORIGINAL_CACHE).use { it.readBytes() }
+                val edited = openFileInput(MODIFIED_CACHE).use { it.readBytes() }
+                val parsed = EkBackup.inspect(edited)
+                originalBytes = original
+                editedBytes = edited
+                saves = parsed
+                appliedChanges = savedInstanceState.getInt("applied_changes")
+                selectedItem = catalog.items.firstOrNull { it.id == savedInstanceState.getInt("item_id", -1) }
+                selectedPotion = catalog.items.firstOrNull { it.id == savedInstanceState.getInt("potion_id", -1) }
+                itemSelectionLabel.text = selectedItem?.name ?: "Nenhum item selecionado"
+                potionSelectionLabel.text = selectedPotion?.name ?: "Nenhuma poção selecionada"
+                lastChange.text = "Sessão restaurada com $appliedChanges alteração(ões)."
+                updateEnabled()
+                refreshPreview(true)
+                setStatus("✓ Edições recuperadas. Exporte quando terminar.", true)
+            } catch (_: Exception) {
+                setStatus("Selecione EK.bak para começar.", false)
+            }
+        } else setStatus("Selecione EK.bak para começar.", false)
     }
 
-    private fun dp(px: Int): Int = (px * resources.displayMetrics.density + .5f).toInt()
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val original = originalBytes
+        val edited = editedBytes
+        if (original != null && edited != null) {
+            openFileOutput(ORIGINAL_CACHE, MODE_PRIVATE).use { it.write(original) }
+            openFileOutput(MODIFIED_CACHE, MODE_PRIVATE).use { it.write(edited) }
+            outState.putBoolean("has_session", true)
+            outState.putInt("applied_changes", appliedChanges)
+            outState.putInt("item_id", selectedItem?.id ?: -1)
+            outState.putInt("potion_id", selectedPotion?.id ?: -1)
+        }
+    }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig) // keep the loaded save and unexported edits on rotation
+    }
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
     private fun margin(top: Int = 0, bottom: Int = 0) =
         LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(top)
             bottomMargin = dp(bottom)
         }
-    private fun shape(fill: Int, outline: Int = GOLD): GradientDrawable = GradientDrawable().apply {
-        setColor(fill)
-        cornerRadius = dp(13).toFloat()
-        setStroke(dp(1), outline)
+    private fun shape(fill: Int, stroke: Int = GOLD): GradientDrawable = GradientDrawable().apply {
+        setColor(fill); cornerRadius = dp(13).toFloat(); setStroke(dp(1), stroke)
     }
-    private fun text(label: String, size: Float = 14f, color: Int = TEXT, bold: Boolean = false): TextView =
+    private fun text(value: String, size: Float = 14f, color: Int = TEXT, bold: Boolean = false): TextView =
         TextView(this).apply {
-            this.text = label
-            textSize = size
-            setTextColor(color)
+            this.text = value; textSize = size; setTextColor(color)
             if (bold) setTypeface(typeface, Typeface.BOLD)
             setLineSpacing(dp(2).toFloat(), 1f)
         }
@@ -91,296 +135,314 @@ class MainActivity : Activity() {
         setPadding(dp(16), dp(14), dp(16), dp(14))
         background = shape(PANEL, Color.rgb(91, 75, 54))
         addView(text(title, 18f, GOLD, true))
-        addView(text(detail, 12f, MUTED), margin(3, 9))
+        if (detail.isNotEmpty()) addView(text(detail, 12f, MUTED), margin(3, 9))
     }
-    private fun number(hint: String, initial: String = ""): EditText = EditText(this).apply {
-        setText(initial)
-        this.hint = hint
-        setHintTextColor(MUTED)
-        setTextColor(TEXT)
-        setSingleLine(true)
-        textSize = 16f
-        inputType = InputType.TYPE_CLASS_NUMBER
+    private fun number(label: String, initial: String = ""): EditText = EditText(this).apply {
+        setText(initial); hint = label; setHintTextColor(MUTED); setTextColor(TEXT)
+        setSingleLine(true); textSize = 16f; inputType = InputType.TYPE_CLASS_NUMBER
         setPadding(dp(12), dp(9), dp(12), dp(9))
         background = shape(Color.rgb(11, 17, 20), Color.rgb(77, 72, 62))
     }
-    private fun action(label: String, primary: Boolean = false, handler: () -> Unit): Button =
+    private fun action(label: String, primary: Boolean = false, callback: () -> Unit): Button =
         Button(this).apply {
-            text = label
-            textSize = 14f
-            isAllCaps = false
-            setTextColor(TEXT)
+            text = label; textSize = 14f; isAllCaps = false; setTextColor(TEXT)
             background = shape(if (primary) GREEN else Color.rgb(46, 57, 65),
                 if (primary) Color.rgb(118, 160, 95) else Color.rgb(90, 101, 104))
-            setOnClickListener { handler() }
+            setOnClickListener { callback() }
         }
-    private fun editAction(label: String, handler: () -> Unit): Button = action(label, true, handler).also {
-        it.isEnabled = false
-        editButtons += it
+    private fun editAction(label: String, callback: () -> Unit): Button = action(label, true, callback).also {
+        it.isEnabled = false; editButtons += it
     }
-
     private fun createInterface() {
         val scroll = ScrollView(this).apply { setBackgroundColor(BG); isFillViewport = true }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(15), dp(10), dp(15), dp(24))
         }
-        scroll.addView(body)
-        setContentView(scroll)
+        scroll.addView(body); setContentView(scroll)
         body.addView(ImageView(this).apply {
             setImageResource(R.drawable.ek_banner)
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de backups • v0.3", 15f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
-        }, margin(0, 13))
+        }, margin(0, 3))
+        body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
+            gravity = Gravity.CENTER
+            setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/old390/EK-Save-Editor"))) }
+        }, margin(0, 12))
 
-        val fileCard = section("📁  Encontrar save", "Crie primeiro um backup atualizado DENTRO de Exiled Kingdoms.")
+        val files = section("📁  Encontrar save", "Crie um backup no jogo e importe o EK.bak pelo gerenciador de arquivos.")
         status = text("", 13f, GOLD, true)
         sourceDetails = text("Nenhum backup importado", 13f, MUTED)
-        fileCard.addView(status, margin(2, 7))
-        fileCard.addView(sourceDetails, margin(5, 8))
-        fileCard.addView(action("📂  Selecionar EK.bak") { importBackup() }, margin(2, 5))
-        body.addView(fileCard, margin(0, 12))
+        files.addView(status, margin(2, 7))
+        files.addView(sourceDetails, margin(5, 8))
+        files.addView(action("📂  Selecionar EK.bak") { importBackup() }, margin(2, 5))
+        body.addView(files, margin(0, 12))
 
-        val savesCard = section("💾  Escolher saves", "As alterações só atingem o save escolhido ou todos, se você selecionar essa opção.")
-        slotSpinner = Spinner(this).apply {
-            background = shape(Color.rgb(14, 21, 25))
-            setPadding(dp(10), dp(7), dp(10), dp(7))
-        }
-        savesCard.addView(slotSpinner, margin(2, 6))
-        body.addView(savesCard, margin(0, 12))
-        slotSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (!refreshingSelection) refreshPreview(fillFields = true)
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
+        val inventory = section("🎒  Inventário, itens e poções", "Exibe uma única lista de referência do auto-save. Todas as alterações atingem todos os saves.")
+        itemsCurrent = text("Nenhum inventário carregado", 13f, TEXT)
+        inventory.addView(itemsCurrent, margin(0, 12))
+        inventory.addView(text("Adicionar item do catálogo", 13f, GOLD, true))
+        itemSelectionLabel = text("Nenhum item selecionado", 13f, TEXT)
+        inventory.addView(itemSelectionLabel, margin(7, 3))
+        inventory.addView(action("🔎  Procurar item por nome ou ID") { chooseCatalog(false) }, margin(3, 5))
+        itemAmount = number("Quantidade de itens", "1")
+        inventory.addView(itemAmount)
+        inventory.addView(editAction("✓  Aplicar item em todos os saves") {
+            val item = selectedItem ?: return@editAction notifyError("Escolha um item no catálogo")
+            val amount = numberValue(itemAmount, "Quantidade", 999, 1).toInt()
+            applyChange("${item.name} × $amount") { paths -> EkBackup.EditPlan(paths, items = listOf(EkBackup.ItemAdd(item.id, amount))) }
+        }, margin(5, 10))
+        inventory.addView(text("Adicionar poção ou consumível", 13f, GOLD, true))
+        potionSelectionLabel = text("Nenhuma poção selecionada", 13f, TEXT)
+        inventory.addView(potionSelectionLabel, margin(7, 3))
+        inventory.addView(action("🧪  Escolher poção na lista") { chooseCatalog(true) }, margin(3, 5))
+        potionAmount = number("Quantidade de poções", "1")
+        inventory.addView(potionAmount)
+        inventory.addView(editAction("✓  Aplicar poção em todos os saves") {
+            val item = selectedPotion ?: return@editAction notifyError("Escolha uma poção na lista")
+            val amount = numberValue(potionAmount, "Quantidade", 999, 1).toInt()
+            applyChange("${item.name} × $amount") { paths -> EkBackup.EditPlan(paths, items = listOf(EkBackup.ItemAdd(item.id, amount))) }
+        }, margin(5, 9))
+        inventory.addView(text("⚠ Itens colocados com inventário cheio podem substituir itens existentes ou até causar perda do inventário. Confira os espaços livres antes de adicionar itens. O editor bloqueará a inserção quando não houver espaço disponível.", 12f, MUTED))
+        body.addView(inventory, margin(0, 12))
 
-        val goldCard = section("🪙  Ouro", "Digite o novo valor, toque em Aplicar e confira a quantidade atualizada abaixo.")
+        val gold = section("🪙  Ouro", "Defina a quantidade de ouro e toque em Aplicar. A mudança aparece imediatamente.")
         goldCurrent = text("Ouro atual: —", 14f, TEXT, true)
-        goldInput = number("Novo valor de ouro", "")
-        goldCard.addView(goldCurrent)
-        goldCard.addView(goldInput, margin(8, 5))
-        goldCard.addView(editAction("✓  Aplicar ouro") {
-            applyChange("Ouro") { paths -> EkBackup.EditPlan(paths, gold = value(goldInput, "Ouro", 999_999_999)) }
+        goldInput = number("Novo valor de ouro")
+        gold.addView(goldCurrent)
+        gold.addView(goldInput, margin(8, 5))
+        gold.addView(editAction("✓  Aplicar ouro a todos") {
+            val value = numberValue(goldInput, "Ouro", 999_999_999)
+            applyChange("Ouro") { paths -> EkBackup.EditPlan(paths, gold = value) }
         }, margin(4, 0))
-        body.addView(goldCard, margin(0, 12))
+        body.addView(gold, margin(0, 12))
 
-        val attributes = section("💪  Atributos", "Edita pontos livres de atributo, não os pontos já distribuídos.")
-        traitCurrent = text("Pontos de atributos atuais: —", 14f, TEXT, true)
-        traitInput = number("Pontos livres de atributos")
+        val attributes = section("💪  Atributos", "Cada toque em Aplicar SOMA a quantidade informada aos pontos livres. Zerar não remove pontos já distribuídos.")
+        traitCurrent = text("Pontos livres atuais: —", 14f, TEXT, true)
+        traitDeltaInput = number("Pontos para adicionar", "10")
         attributes.addView(traitCurrent)
-        attributes.addView(traitInput, margin(8, 5))
-        attributes.addView(editAction("✓  Aplicar atributos") {
-            applyChange("Atributos") { paths ->
-                EkBackup.EditPlan(paths, traitPoints = value(traitInput, "Atributos", 999).toInt())
+        attributes.addView(traitDeltaInput, margin(8, 5))
+        attributes.addView(editAction("+  Somar pontos de atributos") {
+            val amount = numberValue(traitDeltaInput, "Atributos", 999, 1).toInt()
+            applyChange("+$amount atributos") { paths -> EkBackup.EditPlan(paths, traitDelta = amount) }
+        }, margin(4, 6))
+        attributes.addView(editAction("↺  Zerar pontos livres de atributos") {
+            confirmReset("Zerar os pontos livres de atributos do personagem em todos os saves?") {
+                applyChange("Atributos zerados") { paths -> EkBackup.EditPlan(paths, resetTraits = true) }
             }
-        }, margin(4, 0))
+        })
         body.addView(attributes, margin(0, 12))
 
-        val skills = section("✨  Habilidades", "Edita pontos livres de habilidades, não as habilidades aprendidas.")
-        skillCurrent = text("Pontos de habilidades atuais: —", 14f, TEXT, true)
-        skillInput = number("Pontos livres de habilidades")
+        val skills = section("✨  Habilidades", "Cada toque em Aplicar soma mais pontos livres ao total existente.")
+        skillCurrent = text("Pontos livres atuais: —", 14f, TEXT, true)
+        skillDeltaInput = number("Pontos para adicionar", "10")
         skills.addView(skillCurrent)
-        skills.addView(skillInput, margin(8, 5))
-        skills.addView(editAction("✓  Aplicar habilidades") {
-            applyChange("Habilidades") { paths ->
-                EkBackup.EditPlan(paths, skillPoints = value(skillInput, "Habilidades", 999).toInt())
-            }
+        skills.addView(skillDeltaInput, margin(8, 5))
+        skills.addView(editAction("+  Somar pontos de habilidades") {
+            val amount = numberValue(skillDeltaInput, "Habilidades", 999, 1).toInt()
+            applyChange("+$amount habilidades") { paths -> EkBackup.EditPlan(paths, skillDelta = amount) }
         }, margin(4, 0))
         body.addView(skills, margin(0, 12))
 
-        val items = section("⚔️  Inventário, armas e poções", "Cada botão adiciona o item ao backup em memória. As quantidades aplicadas serão mostradas aqui.")
-        itemsCurrent = text("Itens no save: —", 13f, TEXT)
-        items.addView(itemsCurrent, margin(0, 8))
-        items.addView(editAction("✓  Adicionar Adamantite Greatsword (ID 554)") {
-            applyItem(554, 1, "Espada de duas mãos")
+        companionCard = section("🛡️  Companheiro ativo", "Só são mostrados os atributos e habilidades do companheiro ativo. Aplicar soma pontos em todos os saves em que ele estiver ativo.")
+        companionTitle = text("Companheiro", 14f, GOLD, true)
+        companionTraitCurrent = text("Atributos livres: —", 14f, TEXT)
+        companionSkillCurrent = text("Habilidades livres: —", 14f, TEXT)
+        companionTraitInput = number("Atributos para adicionar", "10")
+        companionSkillInput = number("Habilidades para adicionar", "10")
+        companionCard.addView(companionTitle)
+        companionCard.addView(companionTraitCurrent, margin(7, 5))
+        companionCard.addView(companionTraitInput)
+        companionCard.addView(editAction("+  Somar atributos do companheiro") {
+            val n = numberValue(companionTraitInput, "Atributos do companheiro", 999, 1).toInt()
+            applyChange("+$n atributos do companheiro") { paths -> EkBackup.EditPlan(paths, companionTraitDelta = n) }
         }, margin(4, 5))
-        items.addView(editAction("✓  Adicionar Energy Blade (ID 750)") {
-            applyItem(750, 1, "Energy Blade")
-        }, margin(4, 8))
-        items.addView(text("Quantidade de Medipacks (ID 5070)", 12f, MUTED))
-        potionInput = number("Medipacks", "999")
-        items.addView(potionInput, margin(5, 5))
-        items.addView(editAction("✓  Aplicar poções") {
-            val count = value(potionInput, "Medipacks", 999, 1).toInt()
-            applyItem(5070, count, "Medipacks")
-        }, margin(4, 10))
-        items.addView(text("Adicionar outro item por ID", 12f, MUTED))
-        customId = number("ID do item")
-        customAmount = number("Quantidade", "1")
-        items.addView(customId, margin(6, 4))
-        items.addView(customAmount, margin(2, 5))
-        items.addView(editAction("✓  Aplicar item personalizado") {
-            val id = value(customId, "ID do item", 999_999, 1).toInt()
-            val count = value(customAmount, "Quantidade", 999, 1).toInt()
-            applyItem(id, count, "Item ID $id")
+        companionCard.addView(editAction("↺  Zerar atributos livres do companheiro") {
+            confirmReset("Zerar os pontos livres de atributos do companheiro ativo?") {
+                applyChange("Atributos do companheiro zerados") { paths -> EkBackup.EditPlan(paths, resetCompanionTraits = true) }
+            }
+        })
+        companionCard.addView(companionSkillCurrent, margin(10, 5))
+        companionCard.addView(companionSkillInput)
+        companionCard.addView(editAction("+  Somar habilidades do companheiro") {
+            val n = numberValue(companionSkillInput, "Habilidades do companheiro", 999, 1).toInt()
+            applyChange("+$n habilidades do companheiro") { paths -> EkBackup.EditPlan(paths, companionSkillDelta = n) }
         }, margin(4, 0))
-        body.addView(items, margin(0, 12))
+        companionCard.visibility = View.GONE
+        body.addView(companionCard, margin(0, 4))
+        body.addView(text("Quando houver um companheiro ativo no backup, os campos de atributos e habilidades dele aparecerão aqui.", 12f, MUTED), margin(4, 12))
 
-        val export = section("🛡️  Exportar e restaurar", "Aplicar modifica o backup em memória. Para jogar com os novos valores, exporte EK.bak e restaure dentro do jogo.")
+        val export = section("🛡️  Exportar e restaurar", "As mudanças ficam no aplicativo até você exportar o EK.bak e restaurá-lo pelo próprio jogo.")
         lastChange = text("Nenhuma alteração aplicada nesta sessão.", 13f, MUTED)
         export.addView(lastChange, margin(2, 9))
         exportButton = action("💾  Exportar EK.bak modificado", true) {
             val bytes = editedBytes ?: return@action notifyError("Importe o EK.bak primeiro")
-            if (appliedChanges == 0) return@action notifyError("Aplique pelo menos uma alteração antes de exportar")
+            if (appliedChanges == 0) return@action notifyError("Aplique pelo menos uma alteração")
             writeToPicker(bytes, "EK.bak")
         }
-        exportButton.isEnabled = false
         export.addView(exportButton, margin(5, 7))
-        originalButton = action("🗂️  Salvar cópia do EK.bak original") {
-            writeToPicker(originalBytes ?: return@action notifyError("Importe um backup primeiro"), "EK_original_preservado.bak")
+        originalButton = action("🗂️  Salvar cópia do original") {
+            writeToPicker(originalBytes ?: return@action notifyError("Carregue um backup"), "EK_original_preservado.bak")
         }
-        originalButton.isEnabled = false
         export.addView(originalButton, margin(2, 5))
-        export.addView(text("Após exportar, mova o EK.bak modificado para:\n$GAME_PATH\nDepois abra o jogo e use RESTAURAR BACKUP. Preserve o original em outra pasta.", 12f, MUTED), margin(7, 0))
+        export.addView(text("Depois de exportar, mova EK.bak para:\n$GAME_PATH\nAbra o jogo e use RESTAURAR BACKUP. Preserve o arquivo original fora da pasta do jogo.", 12f, MUTED), margin(7, 0))
         body.addView(export, margin(0, 15))
-        body.addView(text("Aplicativo independente; não afiliado aos criadores de Exiled Kingdoms.", 11f, MUTED).apply {
-            gravity = Gravity.CENTER
-        })
-        refreshSlots()
+        body.addView(text("Aplicativo independente; não afiliado aos criadores do jogo. Catálogo de IDs: comunidade Steam (2021).", 11f, MUTED).apply { gravity = Gravity.CENTER })
         updateEnabled()
     }
-
-    private fun setStatus(message: String, ok: Boolean) {
+    private fun confirmReset(message: String, callback: () -> Unit) {
+        AlertDialog.Builder(this).setTitle("Confirmar zeramento")
+            .setMessage(message).setNegativeButton("Cancelar", null)
+            .setPositiveButton("Zerar") { _, _ -> callback() }.show()
+    }
+    private fun chooseCatalog(onlyPotions: Boolean) {
+        val dialogView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), 0)
+        }
+        val search = EditText(this).apply {
+            hint = "Pesquisar nome ou ID"
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+        }
+        val results = ListView(this)
+        dialogView.addView(search)
+        dialogView.addView(results, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(360)))
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (onlyPotions) "Escolher poção" else "Catálogo de itens")
+            .setView(dialogView).setNegativeButton("Cancelar", null).create()
+        var displayed = emptyList<ItemCatalog.Item>()
+        fun refresh(query: String) {
+            displayed = catalog.find(query, onlyPotions).take(250)
+            val labels = displayed.map { "${it.name}  ·  ID ${it.id}" }
+            results.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
+        }
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { refresh(s?.toString() ?: "") }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        results.setOnItemClickListener { _, _, position, _ ->
+            val chosen = displayed[position]
+            if (onlyPotions) { selectedPotion = chosen; potionSelectionLabel.text = chosen.name }
+            else { selectedItem = chosen; itemSelectionLabel.text = chosen.name }
+            dialog.dismiss()
+        }
+        refresh("")
+        dialog.show()
+    }
+    private fun setStatus(message: String, positive: Boolean) {
         status.text = message
-        status.setTextColor(if (ok) Color.rgb(129, 214, 136) else GOLD)
+        status.setTextColor(if (positive) Color.rgb(129, 214, 136) else GOLD)
     }
     private fun notifyError(message: String) {
+        setStatus("Erro: $message", false)
         AlertDialog.Builder(this).setTitle("EK Save Editor")
             .setMessage(message).setPositiveButton("Entendi", null).show()
-        setStatus("Erro: $message", false)
     }
-    private fun value(edit: EditText, field: String, max: Long, min: Long = 0): Long {
-        val number = edit.text.toString().trim().toLongOrNull()
-            ?: error("Preencha '$field' com um número inteiro")
-        require(number in min..max) { "$field deve estar entre $min e $max" }
-        return number
+    private fun numberValue(field: EditText, label: String, max: Long, min: Long = 0): Long {
+        val n = field.text.toString().trim().toLongOrNull() ?: error("Informe um número em '$label'")
+        require(n in min..max) { "$label precisa estar entre $min e $max" }
+        return n
     }
-    private fun targets(): Set<String> {
-        require(saves.isNotEmpty()) { "Importe EK.bak primeiro" }
-        val index = slotSpinner.selectedItemPosition
-        return if (index <= 0) saves.map { it.path }.toSet()
-        else setOf(saves[index - 1].path)
+    private fun allPaths(): Set<String> {
+        require(saves.isNotEmpty()) { "Importe EK.bak antes" }
+        return saves.map { it.path }.toSet()
     }
-    private fun applyItem(id: Int, amount: Int, label: String) {
-        if (applyChange("$label × $amount") { paths ->
-                EkBackup.EditPlan(paths, items = listOf(EkBackup.ItemAdd(id, amount)))
-            }) {
-            lastAppliedItem = id
-            refreshPreview(fillFields = false)
-        }
-    }
-    private fun applyChange(label: String, plan: (Set<String>) -> EkBackup.EditPlan): Boolean {
+    private fun applyChange(label: String, plan: (Set<String>) -> EkBackup.EditPlan) {
         try {
-            val current = editedBytes ?: error("Importe EK.bak primeiro")
-            val chosen = targets()
-            // Do not modify the editor state unless the entire archive rewrite validates.
-            val revised = EkBackup.apply(current, plan(chosen))
-            val parsed = EkBackup.inspect(revised)
-            editedBytes = revised
-            saves = parsed
+            val source = editedBytes ?: error("Importe EK.bak primeiro")
+            val paths = allPaths()
+            val result = EkBackup.apply(source, plan(paths)) // transactional: no partial app changes on failure
+            val readback = EkBackup.inspect(result)
+            editedBytes = result
+            saves = readback
             appliedChanges++
-            lastChange.text = "✓ $label aplicado em ${chosen.size} save(s). $appliedChanges alteração(ões) na memória; exportação pendente."
+            lastChange.text = "✓ $label aplicado em ${paths.size} saves. $appliedChanges alteração(ões) em memória. Exporte o EK.bak para salvar."
             lastChange.setTextColor(Color.rgb(129, 214, 136))
-            setStatus("✓ $label aplicado. Confira o valor abaixo e exporte quando terminar.", true)
-            refreshPreview(fillFields = false)
-            exportButton.isEnabled = true
-            return true
-        } catch (e: Exception) {
-            notifyError(e.message ?: "Falha ao aplicar modificação")
-            return false
-        }
+            refreshPreview(false)
+            updateEnabled()
+            setStatus("✓ $label aplicado em todos os saves. Confira o resultado abaixo.", true)
+        } catch (e: Exception) { notifyError(e.message ?: "Não foi possível aplicar") }
     }
-    private fun updateEnabled() {
-        val loaded = editedBytes != null
-        editButtons.forEach { it.isEnabled = loaded }
-        originalButton.isEnabled = originalBytes != null
-        exportButton.isEnabled = loaded && appliedChanges > 0
-    }
-    private fun refreshSlots() {
-        refreshingSelection = true
-        val index = if (::slotSpinner.isInitialized) slotSpinner.selectedItemPosition else 0
-        val values = mutableListOf("Todos os saves")
-        values += saves.map { "${it.path.substringAfterLast('/')} • ${it.hero}" }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, values).apply {
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
-        slotSpinner.adapter = adapter
-        slotSpinner.setSelection(index.coerceIn(0, values.lastIndex))
-        refreshingSelection = false
-        refreshPreview(fillFields = true)
-    }
-    private fun refreshPreview(fillFields: Boolean) {
-        if (!::goldCurrent.isInitialized) return
-        if (saves.isEmpty()) {
+    private fun previewSave(): EkBackup.SaveInfo? = saves.firstOrNull { it.path.endsWith("/auto.sav") }
+        ?: saves.firstOrNull { it.path.endsWith("/game.sav") }
+        ?: saves.firstOrNull()
+    private fun refreshPreview(fillGold: Boolean) {
+        val representative = previewSave()
+        if (representative == null) {
             goldCurrent.text = "Ouro atual: —"
-            traitCurrent.text = "Pontos de atributos atuais: —"
-            skillCurrent.text = "Pontos de habilidades atuais: —"
-            itemsCurrent.text = "Itens no save: —"
+            traitCurrent.text = "Pontos livres atuais: —"
+            skillCurrent.text = "Pontos livres atuais: —"
+            itemsCurrent.text = "Nenhum inventário carregado"
+            companionCard.visibility = View.GONE
             return
         }
-        val chosen = targets()
-        val selected = saves.filter { it.path in chosen }
-        fun <T> display(values: List<T>): String = if (values.distinct().size == 1) values.first().toString() else "valores diferentes"
-        goldCurrent.text = "Ouro atual: ${display(selected.map { it.gold })}"
-        traitCurrent.text = "Pontos de atributos atuais: ${display(selected.map { it.traitPoints })}"
-        skillCurrent.text = "Pontos de habilidades atuais: ${display(selected.map { it.skillPoints })}"
-        if (fillFields) {
-            goldInput.setText(selected.map { it.gold }.distinct().singleOrNull()?.toString() ?: "")
-            traitInput.setText(selected.map { it.traitPoints }.distinct().singleOrNull()?.toString() ?: "")
-            skillInput.setText(selected.map { it.skillPoints }.distinct().singleOrNull()?.toString() ?: "")
+        fun <T> value(label: String, values: List<T>, reference: T): String {
+            return "$label: $reference${if (values.distinct().size > 1) " (outros saves diferem)" else ""}"
         }
-        itemsCurrent.text = selected.joinToString("\n\n") { info ->
-            val trackedIds = (listOf(554, 750, 5070) + listOfNotNull(lastAppliedItem)).distinct()
-            val tracked = trackedIds.mapNotNull { id ->
-                info.inventory[id]?.let { "$id × $it" }
-            }
-            "${info.path.substringAfterLast('/')} • ${info.hero}\n" +
-                "Ouro ${info.gold} | Atributos ${info.traitPoints} | Habilidades ${info.skillPoints}\n" +
-                "Itens editados: ${tracked.joinToString("; ").ifEmpty { "nenhum" }} | Espaços livres: ${info.freeSlots}" +
-                if (info.inventory.isNotEmpty()) "\nItens (ID × quantidade): ${info.inventory.entries.take(12).joinToString("; ") { "${it.key} × ${it.value}" }}${if (info.inventory.size > 12) "…" else ""}" else ""
-        }
-        sourceDetails.text = "${saves.size} save(s) reconhecidos. ${if (appliedChanges == 0) "Backup original, sem edições." else "$appliedChanges alteração(ões) aplicadas nesta sessão."}"
+        goldCurrent.text = value("Ouro atual", saves.map { it.gold }, representative.gold)
+        traitCurrent.text = value("Pontos livres atuais", saves.map { it.traitPoints }, representative.traitPoints)
+        skillCurrent.text = value("Pontos livres atuais", saves.map { it.skillPoints }, representative.skillPoints)
+        if (fillGold) goldInput.setText(representative.gold.toString())
+        val minimumFree = saves.minOf { it.freeSlots }
+        val details = representative.inventory.toList().sortedBy { catalog.name(it.first).lowercase() }
+            .joinToString("\n") { (id, count) -> "• ${catalog.name(id)} × $count" }
+        itemsCurrent.text = "Inventário de referência: ${representative.hero} (auto-save)\n" +
+            "Espaços livres no inventário exibido: ${representative.freeSlots}\n" +
+            "Espaços livres mínimos entre todos os saves: $minimumFree\n\n" +
+            (details.ifBlank { "Inventário vazio" })
+        val companions = saves.mapNotNull { it.companion }
+        if (companions.isNotEmpty()) {
+            val companion = representative.companion ?: companions.first()
+            companionTitle.text = companion.name
+            companionTraitCurrent.text = value("Atributos livres", companions.map { it.traitPoints }, companion.traitPoints)
+            companionSkillCurrent.text = value("Habilidades livres", companions.map { it.skillPoints }, companion.skillPoints)
+            companionCard.visibility = View.VISIBLE
+        } else companionCard.visibility = View.GONE
+        sourceDetails.text = "${saves.size} saves identificados. ${if (appliedChanges == 0) "Nenhuma edição aplicada." else "$appliedChanges edição(ões) aplicada(s) em todos."}"
+    }
+    private fun updateEnabled() {
+        val present = editedBytes != null
+        editButtons.forEach { it.isEnabled = present }
+        originalButton.isEnabled = originalBytes != null
+        exportButton.isEnabled = present && appliedChanges > 0
     }
     private fun loadBytes(data: ByteArray) {
-        val infos = EkBackup.inspect(data)
+        saves = EkBackup.inspect(data)
         originalBytes = data.copyOf()
         editedBytes = data.copyOf()
-        saves = infos
         appliedChanges = 0
-        lastAppliedItem = null
         lastChange.text = "Nenhuma alteração aplicada nesta sessão."
         lastChange.setTextColor(MUTED)
-        refreshSlots()
+        refreshPreview(true)
         updateEnabled()
-        setStatus("✓ EK.bak reconhecido. Edite e use Aplicar em cada campo.", true)
+        setStatus("✓ EK.bak reconhecido. Todas as edições atingirão todos os saves.", true)
     }
     private fun importBackup() {
-        fun openPicker() {
+        fun choose() {
             startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                type = "*/*"
-                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }, REQUEST_OPEN)
         }
-        if (appliedChanges == 0) openPicker()
-        else AlertDialog.Builder(this).setTitle("Descartar alterações não exportadas?")
-            .setMessage("Ao abrir outro EK.bak, as alterações em memória serão perdidas. Exporte antes, se quiser preservá-las.")
+        if (appliedChanges == 0) choose()
+        else AlertDialog.Builder(this).setTitle("Descartar modificações?")
+            .setMessage("Há edições não exportadas. Exporte o backup antes de importar outro arquivo se quiser preservá-las.")
             .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Abrir novo backup") { _, _ -> openPicker() }.show()
+            .setPositiveButton("Abrir outro backup") { _, _ -> choose() }.show()
     }
-    private fun writeToPicker(bytes: ByteArray, filename: String) {
+    private fun writeToPicker(bytes: ByteArray, name: String) {
         pendingExport = bytes.copyOf()
         startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            type = "application/octet-stream"
-            addCategory(Intent.CATEGORY_OPENABLE)
-            putExtra(Intent.EXTRA_TITLE, filename)
+            type = "application/octet-stream"; addCategory(Intent.CATEGORY_OPENABLE)
+            putExtra(Intent.EXTRA_TITLE, name)
         }, REQUEST_EXPORT)
     }
-    @Deprecated("Compatible with Android 8+ devices")
+    @Deprecated("For Android 8+ compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != RESULT_OK || data?.data == null) {
@@ -391,20 +453,20 @@ class MainActivity : Activity() {
             when (requestCode) {
                 REQUEST_OPEN -> {
                     val bytes = contentResolver.openInputStream(data.data!!)?.use { it.readBytes() }
-                        ?: error("Não foi possível abrir o arquivo")
+                        ?: error("Não foi possível abrir EK.bak")
                     loadBytes(bytes)
                 }
                 REQUEST_EXPORT -> {
                     val bytes = pendingExport ?: error("Exportação cancelada")
                     contentResolver.openOutputStream(data.data!!, "w")?.use { it.write(bytes); it.flush() }
-                        ?: error("Não foi possível gravar o arquivo")
+                        ?: error("Não foi possível gravar o backup")
                     pendingExport = null
-                    setStatus("✓ Arquivo exportado! Restaure o EK.bak pelo menu do jogo.", true)
+                    setStatus("✓ Backup exportado. Agora restaure pelo menu do jogo.", true)
                     AlertDialog.Builder(this).setTitle("Arquivo salvo")
-                        .setMessage("O arquivo foi exportado. Se for o EK.bak modificado, coloque-o em:\n$GAME_PATH\n\nDepois use a opção RESTAURAR BACKUP dentro de Exiled Kingdoms. O editor não altera os saves ativos automaticamente.")
+                        .setMessage("O EK.bak foi exportado. Copie o arquivo modificado para:\n$GAME_PATH\n\nDepois, abra Exiled Kingdoms e escolha RESTAURAR BACKUP. O arquivo original deve ficar preservado.")
                         .setPositiveButton("Entendi", null).show()
                 }
             }
-        } catch (e: Exception) { notifyError("Falha de arquivo: ${e.message}") }
+        } catch (e: Exception) { notifyError("Falha no arquivo: ${e.message}") }
     }
 }

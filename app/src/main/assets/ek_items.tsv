@@ -1,0 +1,725 @@
+# Community item list: Steam 23 Sep 2021. May not cover later game versions.
+100	Leather Cuirass	armor_chest
+101	Leather Leggings	armor_legs
+102	Leather Bracers	armor_arms
+103	Leather Boots	armor_feet
+104	Leather Cap	armor_head
+105	Hardened Leather Cuirass	armor_chest
+106	Hardened Leather Leggings	armor_legs
+107	Hardened Leather Gauntlets	armor_arms
+108	Hardened Leather Boots	armor_feet
+109	Hardened Leather Cap	armor_head
+110	Chainmail Shirt	armor_chest
+111	Chainmail Leggings	armor_legs
+112	Chainmail Gauntlets	armor_arms
+113	Chainmail Boots	armor_feet
+114	Chainmail Coif	armor_head
+115	Platemail Vest	armor_chest
+116	Platemail Leggings	armor_legs
+117	Platemail Gauntlets	armor_arms
+118	Platemail Boots	armor_feet
+119	Knight Helm	armor_head
+120	Buckler	SHIELD
+121	Iron Shield	SHIELD
+122	Forest Chain Shirt	armor_chest
+123	Forest Chain Leggings	armor_legs
+124	Forest Chain Gauntlets	armor_arms
+125	Forest Chain Boots	armor_feet
+126	Forest Chain Coif	armor_head
+127	Blessed Chain Shirt	armor_chest
+128	Blessed Chain Leggings	armor_legs
+129	Blessed Chain Gauntlets	armor_arms
+130	Blessed Chain Boots	armor_feet
+131	Blessed Chain Coif	armor_head
+132	Trollskin Cuirass	armor_chest
+133	Trollskin Leggings	armor_legs
+134	Trollskin Gauntlets	armor_arms
+135	Trollskin Boots	armor_feet
+136	Trollskin Cap	armor_head
+137	Tolassian Chain Shirt	armor_chest
+138	Tolassian Chain Leggings	armor_legs
+139	Tolassian Chain Gauntlets	armor_arms
+140	Tolassian Chain Boots	armor_feet
+141	Tolassian Chain Coif	armor_head
+142	Blessed Platemail Vest	armor_chest
+143	Blessed Platemail Leggings	armor_legs
+144	Blessed Platemail Gauntlets	armor_arms
+145	Blessed Platemail Boots	armor_feet
+146	Assassin's Cuirass	armor_chest
+147	Assassin's Leggings	armor_legs
+148	Assassin's Gauntlets	armor_arms
+149	Assassin's Boots	armor_feet
+150	Assassin's Hood	armor_head
+151	Legion Breastplate	armor_chest
+152	Legion Leggings	armor_legs
+153	Legion Gauntlets	armor_arms
+154	Legion Boots	armor_feet
+155	Legion Helm	armor_head
+156	Velites Chain Shirt	armor_chest
+157	Velites Chain Leggings	armor_legs
+158	Velites Chain Gauntlets	armor_arms
+159	Velites Chain Boots	armor_feet
+160	Velites Chain Coif	armor_head
+161	Blessed Platemail Helm	armor_head
+162	Myrosian Breastplate	armor_chest
+163	Primal Ice Chain Shirt	armor_chest
+164	Primal Ice Chain Leggings	armor_legs
+165	Primal Ice Chain Gauntlets	armor_arms
+166	Primal Ice Chain Boots	armor_feet
+167	Primal Ice Chain Coif	armor_head
+168	Myrosian Gauntlets	armor_arms
+169	Myrosian Leggings	armor_legs
+170	Myrosian Boots	armor_feet
+171	Myrosian Helm	armor_head
+172	Traitor's Chain Shirt	armor_chest
+173	Traitor's Chain Leggings	armor_legs
+174	Traitor's Chain Gauntlets	armor_arms
+175	Traitor's Chain Boots	armor_feet
+176	Traitor's Chain Coif	armor_head
+177	Leggings of Shadows	armor_legs
+180	Shield of the Forge	SHIELD
+181	Shield of the Storm	SHIELD
+182	Charred Buckler	SHIELD
+183	Lesser Shield of Life	SHIELD
+184	Steel Shield	SHIELD
+185	Hero's Shield	SHIELD
+186	Petrified Wood Buckler	SHIELD
+187	Shield of Life	SHIELD
+188	Red Leather Buckler	SHIELD
+189	Red Leather Shield	SHIELD
+190	Large Chitin Shield	SHIELD
+191	Scutum	SHIELD
+192	Chitin Shield	SHIELD
+193	Anointed Shield	SHIELD
+194	Infernal Aegis	SHIELD
+195	Sailor Buckler	SHIELD
+196	Shield of the Dragon Hunter	SHIELD
+197	Wisdom of the Seas	SHIELD
+198	Enchanted Scutum	SHIELD
+201	Goblin Flesh-Cutter	WEAPON
+202	Goblin Lizardskin Boots	armor_feet
+203	Thief's Blade	WEAPON
+204	Sharp Orc Knife	WEAPON
+205	Bone Shiv	WEAPON
+206	Varaol's Boots	armor_feet
+207	Lionskin Cuirass	armor_chest
+208	Mystic Vest	armor_chest
+209	Breastplate of the Forge	armor_chest
+210	Cowl of Fellowship	armor_head
+211	Troll Cleaver	WEAPON
+212	Heroic Helm	armor_head
+213	Lionskin Leggings	armor_legs
+214	Boots of Balance	armor_feet
+215	Ironfoot Boots	armor_feet
+216	Sharkskin Boots	armor_feet
+217	Ruined Dragoon Boots	armor_feet
+218	The Undermother's Hide	armor_chest
+219	Anointed Cuirass	armor_chest
+220	Jungle Boots	armor_feet
+221	Holy Helm	armor_head
+222	Centurion Helm	armor_head
+232	Thuramiam Breastplate	armor_chest
+233	Thuramiam Plate Gauntlets	armor_arms
+234	Thuramiam Plate Leggings	armor_legs
+235	Thuramiam Plate Boots	armor_feet
+236	Thuramiam Plate Helm	armor_head
+240	Gladiator Shield	SHIELD
+241	Gladiator Cuirass	armor_chest
+242	Gladiator Buckler	SHIELD
+243	Gladiator Chainmail Shirt	armor_chest
+244	Gladiator Hardened Leather Cap	armor_head
+245	Gladiator Leather Boots	armor_feet
+246	Gladiator Leather Leggings	armor_legs
+250	Ashen Chestplate	armor_chest
+251	Ashen Gauntlets	armor_arms
+252	Ashen Leggings	armor_legs
+253	Ashen Boots	armor_feet
+254	Ashen Helm	armor_head
+255	Laminated Vest	armor_chest
+256	Kevlar Vest	armor_chest
+257	Conductive Vest	armor_chest
+258	Goggled Helmet	armor_head
+259	Strange Hood	armor_head
+260	Plexifiber Robes	armor_chest
+261	Hunter's Leggings	armor_legs
+262	Jeweled Breastplate	armor_chest
+263	Hunter's Armor	armor_chest
+300	Apprentice Tunic	armor_chest
+301	Apprentice Pants	armor_legs
+302	Apprentice Hood	armor_head
+303	Apprentice Gloves	armor_arms
+304	Apprentice Boots	armor_feet
+305	Journeyman Tunic	armor_chest
+306	Journeyman Pants	armor_legs
+307	Journeyman Gloves	armor_arms
+308	Journeyman Boots	armor_feet
+309	Journeyman Cap	armor_head
+310	Conjurer Gloves	armor_arms
+311	Conjurer Boots	armor_feet
+312	Conjurer Hood	armor_head
+313	Conjurer Pantaloons	armor_legs
+314	Conjurer Tunic	armor_chest
+320	Firedancer Robes	armor_chest
+321	Primzar's Tunic	armor_chest
+322	Toga of the Theurgist	armor_chest
+323	Forest Robes	armor_chest
+324	Arcane Leather Boots	armor_feet
+325	Arcane Leather Doublet	armor_chest
+326	Nature's Robes	armor_chest
+327	Shaman Boots	armor_feet
+328	Caretaker Tunic	armor_chest
+329	Mystic Sandals	armor_feet
+330	Sandals of the Saint	armor_feet
+331	Witch's Robes	armor_chest
+332	High Mage Robes	armor_chest
+333	Sorceress' Sandals	armor_feet
+334	Tunic of the Lightning Priest	armor_chest
+335	Black Silk Leggings	armor_legs
+336	Breeches of the Mad Wizard	armor_legs
+337	Ragged Mittens	armor_arms
+338	Gloves of the Archmage	armor_arms
+339	Hood of the Hermit	armor_head
+340	Explorer Gauntlets	armor_arms
+341	Robe of the White Mage	armor_chest
+360	Scepter of the Underworld	WEAPON
+361	Wand of the Arcanist	WEAPON
+362	Staff of the Arcanist	WEAPON
+363	Branch of the Holy Tree	WEAPON
+364	Staff of the Traveller	WEAPON
+365	Staff of Impact	WEAPON
+366	Staff of the Dead Kings	WEAPON
+367	Wand of Power	WEAPON
+368	Crystallized Wand	WEAPON
+369	Staff of Wonders	WEAPON
+370	Willow Wand	WEAPON
+371	Oak Wand	WEAPON
+372	Wand of Scorching	WEAPON
+373	Icy Wand	WEAPON
+374	Batrax Wand	WEAPON
+375	Acidspitter	WEAPON
+376	Polarized Staff	WEAPON
+380	Staff of Force	WEAPON
+381	Caduceus of Scorching	WEAPON
+382	GreatStaff of Energy	WEAPON
+383	Vitriolic Staff	WEAPON
+384	Staff of the Seas	WEAPON
+385	Wand of Storms	WEAPON
+386	Tolassian Wand	WEAPON
+387	Tolassian Greatstaff	WEAPON
+388	Staff of Storms	WEAPON
+389	Imperial Battlemage Wand	WEAPON
+390	Rod of Incineration	WEAPON
+391	Elm Wand	WEAPON
+392	Staff of Mighty Missiles	WEAPON
+393	Magma Greatstaff	WEAPON
+394	First Winter	WEAPON
+395	Invisible Fist	WEAPON
+396	The Corruptor	WEAPON
+398	Tesla Emitter	WEAPON
+399	Tesla Rod	WEAPON
+400	Dirk	SHIELD
+401	Main Gauche	SHIELD
+402	Lightning Dirk	SHIELD
+403	Hatchet	SHIELD
+404	Toecutter	SHIELD
+405	Flaming Hatchet	SHIELD
+406	Bluesteel Dirk	SHIELD
+407	Flaming Dirk	SHIELD
+408	Cursed Fang	SHIELD
+409	Main Gauche of Shadows	SHIELD
+410	Dirk of the Gambler	SHIELD
+411	Dirk of Betrayal	SHIELD
+412	Tarand's Hatchet	SHIELD
+440	Varannari Owl Figurine	SHIELD
+441	Varannari Turtle Figurine	SHIELD
+442	Varannari Cat Figurine	SHIELD
+443	Ursan Figurine	SHIELD
+450	Lesser Black Orb	SHIELD
+451	Lesser Red Orb	SHIELD
+452	Lesser White Orb	SHIELD
+453	Lesser Green Orb	SHIELD
+454	Lesser Blue Orb	SHIELD
+455	Greater Black Orb	SHIELD
+456	Greater Red Orb	SHIELD
+457	Greater White Orb	SHIELD
+458	Greater Green Orb	SHIELD
+459	Greater Blue Orb	SHIELD
+460	Pouch of Reagents	SHIELD
+461	Jester's Skull	SHIELD
+462	Orb of the High Clouds	SHIELD
+463	Totem of Protection	SHIELD
+501	Iron Dagger	WEAPON
+502	Iron Shortsword	WEAPON
+503	Iron Longsword	WEAPON
+504	Iron Greatsword	WEAPON
+505	Iron Mace	WEAPON
+506	Iron Hammer	WEAPON
+507	Iron Maul	WEAPON
+508	Iron Axe	WEAPON
+509	Iron Greataxe	WEAPON
+521	Steel Dagger	WEAPON
+522	Steel Shortsword	WEAPON
+523	Steel Longsword	WEAPON
+524	Steel Greatsword	WEAPON
+525	Steel Mace	WEAPON
+526	Steel Hammer	WEAPON
+527	Steel Maul	WEAPON
+528	Steel Axe	WEAPON
+529	Steel Greataxe	WEAPON
+531	Bluesteel Dagger	WEAPON
+532	Bluesteel Shortsword	WEAPON
+533	Bluesteel Longsword	WEAPON
+534	Bluesteel Greatsword	WEAPON
+535	Bluesteel Mace	WEAPON
+536	Bluesteel Hammer	WEAPON
+537	Bluesteel Maul	WEAPON
+538	Bluesteel Axe	WEAPON
+539	Bluesteel Greataxe	WEAPON
+540	Bonegrinder	WEAPON
+541	Gurgurth's Maul	WEAPON
+552	Adamantite Shortsword	WEAPON
+553	Adamantite Longsword	WEAPON
+554	Adamantite Greatsword	WEAPON
+571	Vulcan Dagger	WEAPON
+572	Shock Dagger	WEAPON
+573	Dagger of Corrosion	WEAPON
+574	Dagger of Ice	WEAPON
+575	Dagger of Poison	WEAPON
+576	Bluesteel Poisonous Dagger	WEAPON
+577	Deathclaw	WEAPON
+578	Hunter's Fang	WEAPON
+579	Beastgrinder	WEAPON
+580	Sword of Shock	WEAPON
+581	Icy Greatsword	WEAPON
+582	Shortsword of Frost	WEAPON
+583	Sword of Flames	WEAPON
+584	Winter Stone	WEAPON
+585	Crushing Ember	WEAPON
+586	Silvery Mace	WEAPON
+587	Magma Shortsword	WEAPON
+588	Sir Mason's Longsword	WEAPON
+589	Orcslicer	WEAPON
+590	Cruelty	WEAPON
+591	Thunder	WEAPON
+592	Blood Thunder	WEAPON
+593	Magma Longsword	WEAPON
+594	Righteousness	WEAPON
+595	Vulcan Maul	WEAPON
+596	Icy Maul	WEAPON
+597	Rancor	WEAPON
+598	Corsair Falchion	WEAPON
+599	Heavy Scimitar	WEAPON
+600	Sacrificial Dagger	WEAPON
+601	Short Bow	WEAPON
+602	Hunting Bow	WEAPON
+603	Oaken Bow	WEAPON
+604	Hunter's Mark	WEAPON
+605	Lightning Blade	WEAPON
+606	Justice	WEAPON
+607	Winter Wail	WEAPON
+608	Minotaur Axe	WEAPON
+609	Firesplitter	WEAPON
+610	Primal Icicle	WEAPON
+611	Stiletto	WEAPON
+612	Devourer Sting	WEAPON
+613	Ancient Fang	WEAPON
+614	Icicle	WEAPON
+615	Scimitar of Flames	WEAPON
+616	Bone Maul	WEAPON
+617	Bone Mace	WEAPON
+618	Mystic Bone Mace	WEAPON
+619	Lightning Falchion of Defense	WEAPON
+620	Glacier Stone	WEAPON
+621	Lament	WEAPON
+622	Demonclaw	WEAPON
+623	Ghostfinger	SHIELD
+624	Ancestral Blade of the Deer	WEAPON
+625	Godslayer	WEAPON
+700	Silver Bow	WEAPON
+701	Silver Dagger	WEAPON
+702	Silver Shortsword	WEAPON
+703	Silver Longsword	WEAPON
+704	Silver Greatsword	WEAPON
+705	Silver Mace	WEAPON
+708	Vulcan Bow	WEAPON
+709	Lightning Axe	WEAPON
+710	Lightning Greataxe	WEAPON
+711	Greataxe of Falling Stars	WEAPON
+712	Longsword of Falling Stars	WEAPON
+713	Frost Bow	WEAPON
+714	Executioner's Axe	WEAPON
+715	Poisonous Bow	WEAPON
+716	Poisonous Longbow	WEAPON
+717	Sonnet	WEAPON
+718	Ghostbane	WEAPON
+719	Hammer of Corrosion	WEAPON
+720	Maul of Corrosion	WEAPON
+721	Jester's Bow	WEAPON
+722	Despair	WEAPON
+723	Maul of Garrak	WEAPON
+724	Iron Golem Fist	WEAPON
+725	Magma Axe	WEAPON
+726	Soul Drinker	WEAPON
+727	Soul Cleaver	WEAPON
+728	Icy Claymore	WEAPON
+729	Composite Bow	WEAPON
+730	Assasin's Longbow	WEAPON
+731	Maul of Desecration	WEAPON
+732	Mist Hunter's Bow	WEAPON
+733	Flaming Warhammer	WEAPON
+734	Paladin's Longsword	WEAPON
+735	Permafrost Greataxe	WEAPON
+736	Imperial Trollhunter Bow	WEAPON
+737	Thunder	WEAPON
+740	Axe of the Depths	WEAPON
+741	Axe of the Minotaur Kings	WEAPON
+742	Maul of Terror	WEAPON
+750	Energy Blade	WEAPON
+751	Pneumatic Mallet	WEAPON
+752	Monocarbon Scalpel	WEAPON
+753	Ion Recurve	WEAPON
+754	Wyrmslayer	WEAPON
+755	Enchanted Vulcan Bow	WEAPON
+756	Phantom Longsword	WEAPON
+757	Queen's Heart	WEAPON
+758	Wooden Club	WEAPON
+759	Burning Club	WEAPON
+760	Spirit Cleaver	WEAPON
+761	Spirit Breaker	WEAPON
+762	Midnight	WEAPON
+763	Shadow Blade	WEAPON
+764	Melporth's Sword	WEAPON
+765	Silver Bow of Malan	WEAPON
+766	Scimitar of the Wolf	WEAPON
+767	Maul of Disease	WEAPON
+768	Hammer of the White Priest	WEAPON
+769	Screaming Mace	WEAPON
+770	Vindicator	WEAPON
+771	Skeletal Bow	WEAPON
+772	Ghost Eye	WEAPON
+773	Permafrost Bow	WEAPON
+774	The Lady's Eye	WEAPON
+775	The Lord's Fist	WEAPON
+776	Hunter's Machete	WEAPON
+777	Magma Dagger	WEAPON
+778	Dancing Flame	WEAPON
+779	Golden Wand	WEAPON
+1001	Minotaur Horn	general
+1002	Damaged Wolf Pelt	general
+1003	Perfect Wolf Pelt	general
+1004	White Wolf Pelt	general
+1005	Fire Salts	general
+1006	Living Ice	general
+1007	Sparkling Powder	general
+1008	Poison Sac	general
+1009	Zombie Flesh	general
+1010	Skull	general
+1011	Troll Hide	general
+1012	Fire Drake Scale	general
+1013	Demonic Skull	general
+1014	Bear Pelt	general
+1015	Chitin Carapace	general
+1016	Sabercat Eye	general
+1017	Corrupted Sabercat Eye	general
+1018	Vorator Egg	general
+1019	Giant Mamba Fang	general
+1020	Coral Snake Fang	general
+1021	Gold Ingot	general
+1022	Muud'ari Energy Cell	general
+1023	Large Energy Cell	general
+1024	Chunk of Fat	general
+1025	Demonic Wolf Skull	general
+1026	Demonic Wolf Heart	general
+2001	Small Ruby	general
+2002	Small Emerald	general
+2003	Small Sapphire	general
+2004	Small Diamond	general
+2012	Emerald	general
+2013	Ruby	general
+2014	Sapphire	general
+2015	Pearl	general
+2016	Purple Diamond	general
+2100	Blue Orchid	general
+2101	Red Orchid	general
+2102	Luminescent Fungus	general
+2103	Deadweed	general
+2104	Merple	general
+2105	Tesur	general
+2500	Hendrick's Journal	general
+2501	Zaniel's Journal	general
+2502	Azaph's Ring of Elements	ring
+2503	Head of Itharrak the Firedancer	general
+2504	Inheritance Letter	general
+2505	Cage Key	general
+2506	Mysterious Key	general
+2507	Rhayader Medallion	necklace
+2508	The Fire Crystal	general
+2509	The Ice Crystal	general
+2510	The Energy Crystal	general
+2511	Giles' Remains	general
+2512	Letter From Giles	general
+2513	Orc Battle Plans	general
+2514	Niram's Ring	ring
+2515	Inheritance Letter	general
+2516	The Orb of Shadows	SHIELD
+2517	Imperial Copper Penny	general
+2518	Magical Sapphire	general
+2519	Love Letters From Lady Leanna	general
+2520	Dartos' Ring of Isolation	ring
+2521	Tolassian Embalming Codex	general
+2522	Signed Petition	general
+2523	Small Brass Key	general
+2524	Troll Doll	general
+2525	Ruby Key with number 6	general
+2526	Ancient Steel Key	general
+2527	Ruby Key with number 2	general
+2528	Ruby Key with number 3	general
+2529	Sir Morfados' Remains	general
+2530	Zuz'sare's Charm	general
+2531	My Little Vorator, by Terezza	general
+2532	Magical Sapphire	general
+2533	Ruby Key with number 1	general
+2534	Ruby Key with number 4	general
+2535	Ruby Key with number 5	general
+2536	Magical Ruby	general
+2537	Ruby Key with number 7	general
+2600	Black Shard	general
+2601	Black Shard	general
+2602	On Imperial Necromancy	general
+2603	Journal of Jorgus the Red	general
+2604	Ancient Quill Pen	general
+2605	The Oppalan Frontier	general
+2606	Torn Book Page	general
+2607	Elleira's Pendant	necklace
+2608	Of Ghosts and Spectres	general
+2609	Vampires, the myth	general
+2610	Winter rations	general
+2611	Sister Calvin's Holy Symbol	necklace
+2612	Ancient Idol	general
+2613	Ankh of Life	general
+2614	Serpentine Necklace	necklace
+2615	Handwritten Note	general
+2616	Handwritten Note	general
+2617	Handwritten Note	general
+2618	Broken Crown of Tol	armor_head
+2619	Red Card	general
+2620	Blue Card	general
+2621	Green Card	general
+2622	Control Module	general
+2623	First Orb of Galade	general
+2624	Second Orb of Galade	general
+2625	A Note	general
+2626	The Mathrisian Codex	general
+2627	Ancient Smithy Hammer	general
+2628	Orange Card	general
+2629	Handwritten Note	general
+2630	Data Pad	general
+2631	Pointy Tool	general
+2632	Brother Ladan's Holy Symbol	necklace
+2633	Pulsating Heart	general
+2634	Handwritten Note	general
+2635	Sir Aramas' Remains	general
+2636	Purple Medallion	necklace
+2637	Lifestone	general
+3001	Lesser Ring of Death Ward	ring
+3002	Ring of the Elements	ring
+3003	Lesser Ring of Flames	ring
+3004	Lesser Ring of Ice	ring
+3005	Ring of Death Ward	ring
+3007	Ring of Flames	ring
+3008	Ring of Ice	ring
+3009	Ring of Endurance	ring
+3010	Lesser Ring of Endurance	ring
+3011	Mystic Ring	ring
+3012	Ring of Health	ring
+3013	Oasis Ring	ring
+3014	Sentient Ring	ring
+3015	Greater Ring of Death Ward	ring
+3016	Greater Ring of Flames	ring
+3017	Greater Ring of Ice	ring
+3018	Ilmaran Signet Ring	ring
+3019	Ring of Isolation	ring
+3020	Ring of the Frozen Heart	ring
+3021	Lesser Ring of Learning	ring
+3022	Ring of Charm	ring
+3023	Iagus' Ring of Learning	ring
+3024	Greater Ring of Endurance	ring
+3025	Ring of Unlife	ring
+3026	Ring of Vitality	ring
+3027	Ring of Mentalism	ring
+3028	The Abbot's Ring	ring
+3029	Ivory Ring	ring
+3030	Bishop Ring	ring
+3031	Ring of Holiness	ring
+3032	Ring of the Bull	ring
+3033	Ring of the Star Traveller	ring
+3034	Ring of the Scholar	ring
+3035	Defective Magic Ring	ring
+3036	Ring of the Red Sorcerer	ring
+3037	Ring of the Planeswalker	ring
+3038	Arcanist's Ring of Ice	ring
+3039	Ring of the Trader	ring
+3040	Ring of Perfect Isolation	ring
+3200	Gauntlets of the Forge	armor_arms
+3201	Gloves of Luck	armor_arms
+3202	Laboratory Gloves	armor_arms
+3203	Ruined Gauntlets of Might	armor_arms
+3204	Essence Gloves	armor_arms
+3205	Gloves of the Explorer	armor_arms
+3206	Gauntlets of Might	armor_arms
+3207	Automated Gloves	armor_arms
+3500	Fur Cloak	cloak
+3501	Cloak of the Wolf	cloak
+3502	Cloak of Survival	cloak
+3503	Nivarian Cloak	cloak
+3504	Spectral Cloak	cloak
+3505	Iron Will Mantle	cloak
+3506	Primeval Mantle	cloak
+3507	Vorator Hide Mantle	cloak
+3508	Cloak of Might	cloak
+3509	Jabal Silk Cloak	cloak
+3510	Phantom Cloak	cloak
+3511	Cloak of the Dark Fate	cloak
+3512	Cloak of the Bear	cloak
+4000	Blessed Necklace	necklace
+4001	Amulet of the Forest	necklace
+4002	Arcane Pendant	necklace
+4003	Amulet of Wilderness	necklace
+4004	Necklace of Charm	necklace
+4005	Half-Moon Medallion	necklace
+4006	Holy Symbol of the Three	necklace
+4007	Amulet of the Eyes	necklace
+4008	Bloodied Scarf	necklace
+4009	Laertes' Medallion	necklace
+4010	Anointed Medallion	necklace
+4011	Ursan Charm	necklace
+4012	Necklace of the Depths	necklace
+4013	Flame Pendant	necklace
+4014	Shaman Charm	necklace
+4015	Charm of the Great Seer	necklace
+4016	Forsaken Pendant	necklace
+4017	Magister Pendant	necklace
+4018	Imperial College Emblem	necklace
+4019	Amulet of Whispers	necklace
+4020	Amulet of Dark Whispers	necklace
+4021	Warrior's Gorget	necklace
+4500	Tiara of the Heavens	armor_head
+4501	Crown of Galade	armor_head
+4502	Tiara of the Mentalist	armor_head
+4503	Greater Tiara of the Heavens	armor_head
+5000	Potion of Light Healing	POTION
+5001	Potion of Moderate Healing	POTION
+5002	Potion of Lesser Shielding	POTION
+5003	Potion of Shielding	POTION
+5004	Potion of Ogre Might	POTION
+5005	Potion of Giant Strength	POTION
+5006	Potion of Invisibility	POTION
+5007	Potion of Speed	POTION
+5008	Potion of Resist Fire	POTION
+5009	Potion of Resist Cold	POTION
+5010	Potion of Death Ward	POTION
+5011	Potion of Resist Shock	POTION
+5012	Potion of Resist Toxic	POTION
+5013	Ancient Tolassian Tome	POTION
+5014	Spider Venom	POTION
+5015	Scorpion Venom	POTION
+5016	Potion of Greater Healing	POTION
+5017	Essence of Darkness	POTION
+5020	Lesser Potion of Mana	POTION
+5021	Potion of Mana	POTION
+5022	Golden Apple	POTION
+5023	Potion of Lesser Restoration	POTION
+5024	Greater Potion of Speed	POTION
+5025	Potion of Clarity	POTION
+5026	Friguld Rum	POTION
+5027	Potion of Heroism	POTION
+5028	Potion of the Tragic Hero	POTION
+5029	Giant Mead	POTION
+5030	Greater Potion of Resist Fire	POTION
+5031	Greater Potion of Resist Cold	POTION
+5032	Greater Potion of Death Ward	POTION
+5033	Greater Potion of Resist Shock	POTION
+5034	Greater Potion of Resist Toxic	POTION
+5035	Tome of Lost Wisdom	POTION
+5036	Elixir of Galade	POTION
+5037	Deepfrost Cognac	POTION
+5038	Whitetower Special	POTION
+5039	Draught of the Iron Guardian	POTION
+5040	Draught of the Forest Druid	POTION
+5050	Potion of Epic Death Ward	POTION
+5051	Energy Cell	POTION
+5052	Greater Potion of Mana	POTION
+5053	Panacea	POTION
+5060	Epic Omelette	POTION
+5070	Medipack	POTION
+6001	Scroll of Recall	SCROLL
+6002	Scroll of Detection	SCROLL
+6003	Scroll of Lesser Wisdom	SCROLL
+6004	Scroll of Wisdom	SCROLL
+6005	Scroll of Greater Wisdom	SCROLL
+6006	Scroll: Summon Wolf	SCROLL
+6007	Scroll: Summon Dire Wolf	SCROLL
+6008	Scroll: Summon Earth Elemental	SCROLL
+6009	Scroll: Circle of Restoration	SCROLL
+6010	Scroll: Turn Undead	SCROLL
+6011	Scroll: Teleport	SCROLL
+6012	Scroll: Summon Fire Elemental	SCROLL
+6013	Scroll: Summon Ice Elemental	SCROLL
+6014	Scroll: Planar Binding	SCROLL
+6015	Scroll: Test Area	SCROLL
+7000	Belt of Might	belt
+7001	Belt of Agility	belt
+7002	Girdle of Agility	belt
+7003	Girdle of Might	belt
+7004	Superior Belt of Agility	belt
+7005	Superior Belt of Might	belt
+7006	Girdle of the Warrior	belt
+7007	Girdle of the Rogue	belt
+7008	Blessed Belt of Might	belt
+7009	Blessed Belt of Agility	belt
+7010	Force Belt	belt
+7011	Belt of Flowing Thought	belt
+7012	Superior Belt of Flowing Thought	belt
+7013	Girdle of the Sorcerer	belt
+7014	Girdle of Intellect	belt
+7015	Girdle of Supreme Intellect	belt
+10001	Tome of Jablarxis	general
+10002	Tome of the Yellow Sands	general
+10003	Tome of the Eldritch War	general
+10004	Tome of Nuhadaz	general
+10005	Tome of Eniarth	general
+10006	Annals of the Irux Rebellion	general
+10007	Tome of the Blazing Star	general
+10008	The General's Journal, Part I	general
+10009	The General's Journal, Part II	general
+10010	Seal Ring of House Tamoz	ring
+10011	Seal Ring of House Essa	ring
+10012	Seal Ring of House Urda	ring
+10013	Seal Ring of House Zolast	ring
+10014	Seal Ring of House Jomte	ring
+10015	Seal Ring of House Tindra	ring
+10016	Seal Ring of House Silar	ring
+10017	Seal Ring of House Nabure	ring
+10018	Seal Ring of House Dalgir	ring
+10019	Seal Ring of House Imoz	ring
+10020	Seal Ring of House Debir	ring
+10021	Seal Ring of House Jiosa	ring
+10022	Seal Ring of House Sempa	ring
+10023	Seal Ring of House Jogor	ring
+10024	Seal Ring of House Dimas	ring
+10025	Seal Ring of House Thelor	ring
+10026	Annals of the Ozor Rebellion	general
+10027	Tome of Imperial Poetry	general
+10028	Tome of Imperial Geography I	general
+10029	Tome of Imperial Geography II	general
+10030	Tome of Imperial Geography III	general
+10031	Annals of the Orc Rebellion	general
+10032	Tome of Imperial Poetry II	general
+10033	Tome of Imperial History I	general
+10034	Tome of Imperial History II	general
+10035	Tome of Imperial History III	general
+10036	A Brief History of the Emperors	general
+10037	Remains of Saint Zila	general
+10038	Remains of Saint Bomo	general
+10039	Remains of Saint Ladia	general
+10040	Remains of Saint Perso	general
