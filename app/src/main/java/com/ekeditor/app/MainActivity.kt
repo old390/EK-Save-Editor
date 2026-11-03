@@ -177,7 +177,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.5.4", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.5.5", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -517,6 +517,14 @@ class MainActivity : Activity() {
      */
     private fun showInventorySlotActions(index: Int, slot: EkBackup.InventorySlot, label: String) {
         val stackable = ItemRules.isStackable(slot.id)
+        val selectedSlots = previewSave()?.inventorySlots.orEmpty()
+        // Ordem da cópia entre itens de mesmo ID: primeira = 0, segunda = 1...
+        // Assim a grade pode controlar uma cópia específica em todos os saves,
+        // mesmo quando as posições de cada inventário são diferentes.
+        val occurrence = selectedSlots.take(index + 1).count { it.id == slot.id } - 1
+        if (occurrence < 0 || selectedSlots.getOrNull(index)?.id != slot.id) {
+            return notifyError("A grade mudou. Toque novamente no item atualizado.")
+        }
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(7), dp(18), dp(7))
@@ -552,7 +560,8 @@ class MainActivity : Activity() {
                         val amount = numberValue(input, "Quantidade", 999, 1).toInt()
                         applyChange("+$amount ${if (unitary) "cópia(s)" else "unidade(s)"} de $label") { paths ->
                             EkBackup.EditPlan(paths, slotEdits = listOf(
-                                EkBackup.SlotEdit(index, slot.id, slot.count, amount, addQuantity = true)))
+                                EkBackup.SlotEdit(index, slot.id, slot.count, amount,
+                                    addQuantity = true, occurrence = occurrence)))
                         }
                     } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
                 }.show()
@@ -573,7 +582,8 @@ class MainActivity : Activity() {
                         val amount = numberValue(input, "Quantidade", 999, 1).toInt()
                         applyChange("Quantidade de $label = $amount") { paths ->
                             EkBackup.EditPlan(paths, slotEdits = listOf(
-                                EkBackup.SlotEdit(index, slot.id, slot.count, amount)))
+                                EkBackup.SlotEdit(index, slot.id, slot.count, amount,
+                                    occurrence = occurrence)))
                         }
                     } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
                 }.show()
@@ -586,7 +596,8 @@ class MainActivity : Activity() {
                 .setPositiveButton("Excluir") { _, _ ->
                     applyChange("Excluído $label") { paths ->
                         EkBackup.EditPlan(paths, slotEdits = listOf(
-                            EkBackup.SlotEdit(index, slot.id, slot.count, 0)))
+                            EkBackup.SlotEdit(index, slot.id, slot.count, 0,
+                                occurrence = occurrence)))
                     }
                 }.show()
         }
