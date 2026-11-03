@@ -39,6 +39,7 @@ class MainActivity : Activity() {
         private val MUTED = Color.rgb(179, 182, 181)
         private val GOLD = Color.rgb(201, 165, 108)
         private val GREEN = Color.rgb(40, 106, 67)
+        private val NON_STACKABLE_RED = Color.rgb(238, 96, 96)
     }
     private var originalBytes: ByteArray? = null
     private var editedBytes: ByteArray? = null
@@ -194,7 +195,7 @@ class MainActivity : Activity() {
         inventory.addView(itemsCurrent, margin(0, 7))
         inventoryGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         inventory.addView(inventoryGrid, margin(1, 5))
-        inventory.addView(text("Toque em um item para somar, alterar a quantidade, excluir ou substituí-lo. Em um espaço vazio, escolha um item para inserir. Quando os saves tiverem itens diferentes ou o inventário estiver cheio, você poderá escolher uma substituição explícita antes de aplicar.", 11f, MUTED), margin(4, 12))
+        inventory.addView(text("Toque em um item para somar, alterar a quantidade, excluir ou substituí-lo. Em um espaço vazio, escolha um item para inserir. Quando os saves tiverem itens diferentes ou o inventário estiver cheio, você poderá escolher uma substituição explícita antes de aplicar. Nomes em vermelho: itens não empilháveis (1 por espaço).", 11f, MUTED), margin(4, 12))
         inventory.addView(text("Adicionar item do catálogo", 13f, GOLD, true))
         itemSelectionLabel = text("Nenhum item selecionado", 13f, TEXT)
         inventory.addView(itemSelectionLabel, margin(7, 3))
@@ -383,7 +384,9 @@ class MainActivity : Activity() {
                 tile.addView(text(iconFor(label, occupied), 26f, if (occupied) TEXT else MUTED).apply {
                     gravity = Gravity.CENTER
                 })
-                tile.addView(text(label, 10f, if (occupied) TEXT else MUTED).apply {
+                tile.addView(text(label, 10f,
+                    if (occupied && !ItemRules.isStackable(slot.id)) NON_STACKABLE_RED
+                    else if (occupied) TEXT else MUTED).apply {
                     gravity = Gravity.CENTER
                     maxLines = 2
                     ellipsize = TextUtils.TruncateAt.END
@@ -598,7 +601,17 @@ class MainActivity : Activity() {
         fun refresh(query: String) {
             displayed = catalog.find(query, onlyPotions).take(250)
             val labels = displayed.map { "${it.name}  ·  ID ${it.id}" }
-            results.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
+            results.adapter = object : ArrayAdapter<String>(
+                this, android.R.layout.simple_list_item_1, labels
+            ) {
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                    val view = super.getView(position, convertView, parent)
+                    (view as? TextView)?.setTextColor(
+                        if (!ItemRules.isStackable(displayed[position].id)) NON_STACKABLE_RED else TEXT
+                    )
+                    return view
+                }
+            }
         }
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -609,8 +622,19 @@ class MainActivity : Activity() {
             val chosen = displayed[position]
             dialog.dismiss()
             if (onPicked != null) onPicked(chosen)
-            else if (onlyPotions) { selectedPotion = chosen; potionSelectionLabel.text = chosen.name }
-            else { selectedItem = chosen; itemSelectionLabel.text = chosen.name }
+            else if (onlyPotions) {
+                selectedPotion = chosen
+                potionSelectionLabel.text = chosen.name
+                potionSelectionLabel.setTextColor(
+                    if (ItemRules.isStackable(chosen.id)) TEXT else NON_STACKABLE_RED
+                )
+            } else {
+                selectedItem = chosen
+                itemSelectionLabel.text = chosen.name
+                itemSelectionLabel.setTextColor(
+                    if (ItemRules.isStackable(chosen.id)) TEXT else NON_STACKABLE_RED
+                )
+            }
         }
         refresh("")
         dialog.show()
