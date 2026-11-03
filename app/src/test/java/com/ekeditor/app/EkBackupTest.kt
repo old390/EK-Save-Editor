@@ -514,13 +514,13 @@ class EkBackupTest {
         val infos = EkBackup.inspect(modified)
         assertEquals(paths, infos.map { it.path }.toSet())
         assertTrue(infos.all { it.freeTraitPoints == 20 && it.freeSkillPoints == 23 })
-        assertTrue(infos.all { it.companion?.freeTraitPoints == 8 && it.companion.freeSkillPoints == 10 })
+        assertTrue(infos.all { it.companion?.freeTraitPoints == 8 && it.companion?.freeSkillPoints == 10 })
         val reset = EkBackup.apply(modified, EkBackup.EditPlan(paths,
             resetTraits = true, resetSkills = true,
             resetCompanionTraits = true, resetCompanionSkills = true))
         val zeros = EkBackup.inspect(reset)
         assertTrue(zeros.all { it.freeTraitPoints == 0 && it.freeSkillPoints == 0 })
-        assertTrue(zeros.all { it.companion?.freeTraitPoints == 0 && it.companion.freeSkillPoints == 0 })
+        assertTrue(zeros.all { it.companion?.freeTraitPoints == 0 && it.companion?.freeSkillPoints == 0 })
     }
 
 }
