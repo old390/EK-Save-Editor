@@ -1,9 +1,9 @@
 package com.ekeditor.app
 
 /**
- * Leitura e edição dos quatro baús da Prefeitura.
- * Os containers worldContainers (vault..vault4) são independentes do backpack.
- * Apenas o container selecionado é alterado; o restante do save é preservado.
+ * Read and edit the four Town Hall vaults.
+ * worldContainers (vault..vault4) are independent of the backpack.
+ * Only the selected container is changed; the rest of the save is preserved.
  */
 object VaultStorage {
     enum class Action { UNLOCK, ADD, SET, DELETE, INSERT, REPLACE }
@@ -28,18 +28,18 @@ object VaultStorage {
         val expectedByPath: Map<String, EkBackup.InventorySlot> = emptyMap()
     ) {
         fun validate(paths: Set<String>) {
-            require(vault in 1..4) { "Selecione um baú válido" }
+            require(vault in 1..4) { "Select a valid vault" }
             if (action == Action.UNLOCK) return
             require(index in 0..19 && itemId in 1..999_999 && amount in 0..999 &&
-                occurrence >= 0) { "Dados do item do baú inválidos" }
+                occurrence >= 0) { "Invalid vault item data" }
             if (action in setOf(Action.ADD, Action.SET, Action.INSERT, Action.REPLACE))
-                require(amount in 1..999) { "Quantidade inválida" }
+                require(amount in 1..999) { "Invalid quantity" }
             if (action == Action.REPLACE)
-                require(expectedByPath.keys == paths) { "Confirmação incompleta dos quatro saves" }
+                require(expectedByPath.keys == paths) { "Incomplete confirmation for the selected character's saves" }
         }
     }
 
-    // O formato foi validado contra os quatro arquivos .sav de um backup real.
+    // Format validated against the .sav files in a real game backup.
     private val containerPattern = Regex(
         """(?m)(^\t\t\{\s*\n\t\t\tid:\s*(vault[234]?)\s*\n\t\t\titems:\s*\{\s*\n\t\t\t\titemList:\s*\[)([^\]]*)(\]\s*\n\t\t\t\tstackUnits:\s*\[)([^\]]*)(\])"""
     )
@@ -52,17 +52,17 @@ object VaultStorage {
 
     private fun parseNumbers(raw: String): MutableList<Int> =
         raw.split(',').map {
-            it.trim().toIntOrNull() ?: error("Valor de baú inválido")
+            it.trim().toIntOrNull() ?: error("Invalid vault value")
         }.toMutableList()
 
     private fun slots(match: MatchResult): List<EkBackup.InventorySlot> {
         val ids = parseNumbers(match.groupValues[3])
         val counts = parseNumbers(match.groupValues[5])
         require(ids.size == 20 && counts.size == 20) {
-            "O baú não possui 20 espaços compatíveis; alteração cancelada"
+            "This vault does not have 20 compatible slots. Edit canceled."
         }
         require(ids.all { it >= 0 } && counts.all { it >= 0 }) {
-            "Valores negativos no baú"
+            "Negative values found in the vault"
         }
         return ids.zip(counts).map { (id, count) -> EkBackup.InventorySlot(id, count) }
     }
@@ -70,7 +70,7 @@ object VaultStorage {
     private fun unlocked(text: String, number: Int): Boolean {
         val pattern = Regex("""(?m)^\t""" + Regex.escape(flag(number)) + """:\s*(true|false)[ \t]*$""")
         val matches = pattern.findAll(text).toList()
-        require(matches.size == 1) { "Situação de desbloqueio do baú $number não encontrada" }
+        require(matches.size == 1) { "Vault unlock status for $number was not found" }
         return matches.single().groupValues[1] == "true"
     }
 
@@ -82,7 +82,7 @@ object VaultStorage {
 
     private fun chosen(text: String, number: Int): VaultInfo =
         read(text).singleOrNull { it.number == number }
-            ?: error("Baú $number não localizado neste save. Nenhum dado modificado.")
+            ?: error("Vault $number not found in this save. No changes made.")
 
     private fun selectedSlot(old: List<EkBackup.InventorySlot>, change: Change): Int? =
         old.indices.filter { old[it].id == change.itemId }.getOrNull(change.occurrence)
@@ -95,19 +95,19 @@ object VaultStorage {
         val free = ids.indices.filter { ids[it] == 0 }.toMutableList()
         if (preferred != null) {
             require(preferred in free) {
-                "Espaço " + (preferred + 1) + " ocupado no baú de " + path
+                "Slot " + (preferred + 1) + " is occupied in the vault in " + path
             }
             free.remove(preferred)
             free.add(0, preferred)
         }
         if (!ItemRules.isStackable(id)) {
             require(free.size >= amount) {
-                "Baú com espaço insuficiente em " + path + ": item unitário precisa de " + amount + " espaços livres; somente " + free.size + " disponíveis"
+                "Insufficient vault space in " + path + ": non-stackable items require " + amount + " free slots; only " + free.size + " available"
             }
             for (i in free.take(amount)) { ids[i] = id; counts[i] = 1 }
         } else {
             require(free.isNotEmpty()) {
-                "Baú cheio em " + path + ". Escolha substituição com confirmação."
+                "Vault full in " + path + ". Choose an item and explicitly confirm the replacement."
             }
             ids[free.first()] = id
             counts[free.first()] = amount
@@ -117,17 +117,17 @@ object VaultStorage {
     fun modify(text: String, change: Change, path: String): String {
         require(change.vault in 1..4)
         val match = findContainer(text, change.vault)
-            ?: error("Baú " + change.vault + " ausente em " + path)
+            ?: error("Vault " + change.vault + " missing in " + path)
         val initial = chosen(text, change.vault)
         if (change.action == Action.UNLOCK) {
             val field = Regex("""(?m)^(\t""" + Regex.escape(flag(change.vault)) + """:\s*)(true|false)([ \t]*)$""")
-            val flagMatch = field.find(text) ?: error("Campo de desbloqueio ausente em " + path)
+            val flagMatch = field.find(text) ?: error("Campo de desbloqueio missing in " + path)
             if (initial.unlocked) return text
             return text.replaceRange(flagMatch.range,
                 flagMatch.groupValues[1] + "true" + flagMatch.groupValues[3])
         }
         require(initial.unlocked) {
-            "Baú " + change.vault + " bloqueado em " + path + ". Desbloqueie antes de editar."
+            "Vault " + change.vault + " is locked in " + path + ". Unlock it before editing."
         }
         val ids = initial.slots.map { it.id }.toMutableList()
         val counts = initial.slots.map { it.count }.toMutableList()
@@ -140,7 +140,7 @@ object VaultStorage {
                     if (index == null) insert(ids, counts, change.itemId, change.amount, path)
                     else {
                         require(counts[index].toLong() + change.amount <= 999L) {
-                            "A pilha excederia 999 unidades em " + path
+                            "Stack size would exceed 999 in " + path
                         }
                         counts[index] += change.amount
                     }
@@ -160,14 +160,14 @@ object VaultStorage {
             Action.REPLACE -> {
                 ItemRules.ensureSlotQuantity(change.itemId, change.amount)
                 val expected = change.expectedByPath[path]
-                    ?: error("Falta confirmação para " + path)
+                    ?: error("Missing replacement confirmation for " + path)
                 require(initial.slots[change.index] == expected) {
-                    "O espaço " + (change.index + 1) + " mudou em " + path + ". Substituição cancelada."
+                    "O espaço " + (change.index + 1) + " changed in " + path + ". Replacement canceled."
                 }
                 ids[change.index] = change.itemId
                 counts[change.index] = change.amount
             }
-            Action.UNLOCK -> error("Ação inesperada")
+            Action.UNLOCK -> error("Unexpected operation")
         }
         val groups = match.groupValues
         val updated = groups[1] + ids.joinToString(", ", " ", " ") +
@@ -176,64 +176,64 @@ object VaultStorage {
     }
 
     /**
-     * Verificação pós-gravação: só o baú escolhido pode mudar.
-     * Em uma troca, os outros 19 espaços devem permanecer idênticos.
+     * Post-write verification: only the selected vault may change.
+     * When replacing one slot, the other 19 must remain unchanged.
      */
     fun verify(before: String, after: String, change: Change, path: String) {
         val oldVaults = read(before).associateBy { it.number }
         val newVaults = read(after).associateBy { it.number }
         require(oldVaults.keys == newVaults.keys) {
-            "A quantidade de baús mudou em " + path
+            "A quantidade de baús changed in " + path
         }
         for ((n, v) in oldVaults) if (n != change.vault) {
             require(v == newVaults[n]) {
-                "Baú " + n + " foi alterado inesperadamente em " + path
+                "Vault " + n + " was unexpectedly modified in " + path
             }
         }
-        val previous = oldVaults[change.vault] ?: error("Baú original ausente")
-        val current = newVaults[change.vault] ?: error("Baú modificado ausente")
+        val previous = oldVaults[change.vault] ?: error("Vault original ausente")
+        val current = newVaults[change.vault] ?: error("Vault modificado ausente")
         if (change.action == Action.UNLOCK) {
             require(current.unlocked && previous.slots == current.slots) {
-                "Falha ao desbloquear baú sem alterar os itens"
+                "Could not unlock the vault without changing items"
             }
             return
         }
-        require(previous.unlocked == current.unlocked) { "Estado do baú mudou inesperadamente" }
+        require(previous.unlocked == current.unlocked) { "Vault unlock state unexpectedly changed" }
         val totalBefore = previous.total(change.itemId)
         val totalAfter = current.total(change.itemId)
         when (change.action) {
             Action.ADD, Action.INSERT -> require(totalAfter == totalBefore + change.amount) {
-                "A adição no baú " + change.vault + " não corresponde ao solicitado em " + path
+                "The addition to vault " + change.vault + " does not match the requested amount in " + path
             }
             Action.DELETE -> {
                 val index = selectedSlot(previous.slots, change)
                 val removed = if (index == null) 0 else previous.slots[index].count
                 require(totalAfter == totalBefore - removed) {
-                    "A exclusão não corresponde ao item selecionado em " + path
+                    "Deletion did not match the selected item in " + path
                 }
             }
             Action.SET -> {
                 val index = selectedSlot(previous.slots, change)
                 val oldCount = if (index == null) 0 else previous.slots[index].count
                 require(totalAfter == totalBefore - oldCount + change.amount) {
-                    "A quantidade do item não foi definida corretamente"
+                    "Item quantity was not set correctly"
                 }
             }
             Action.REPLACE -> {
                 require(current.slots[change.index] == EkBackup.InventorySlot(change.itemId, change.amount)) {
-                    "Troca não aplicada em " + path
+                    "Replacement not applied in " + path
                 }
                 require(previous.slots.indices.filter { it != change.index }.all {
                     previous.slots[it] == current.slots[it]
-                }) { "A troca afetou outras posições do baú" }
+                }) { "The replacement affected other vault slots" }
             }
             Action.UNLOCK -> Unit
         }
         if (change.action != Action.REPLACE) {
-            // Sem substituição confirmada, nenhum item de outro ID pode sumir.
+            // Without a confirmed replacement, no item with another ID may disappear.
             val originals = previous.slots.filter { it.id != 0 && it.id != change.itemId }
             val updated = current.slots.filter { it.id != 0 && it.id != change.itemId }
-            require(originals == updated) { "Outro item do baú mudou inesperadamente em " + path }
+            require(originals == updated) { "Another vault item changed unexpectedly in " + path }
         }
     }
 }
