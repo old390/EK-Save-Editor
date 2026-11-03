@@ -1,4 +1,4 @@
-# EK Save Editor v0.5.2 — feito por old390
+# EK Save Editor v0.6.0 — feito por old390
 
 Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Não afiliado aos criadores do jogo.
 
@@ -40,3 +40,13 @@ Criado por old390: https://github.com/old390/EK-Save-Editor
 - Somar, definir ou excluir por ID procura o item em cada save. Se ele estiver ausente, uma edição que adiciona quantidades procura uma posição livre; a exclusão não mexe nesse save. Se não houver espaço, o editor explica qual save está cheio.
 - Para **substituir** itens em um slot, o app exibe o conteúdo daquela posição **em cada save** e solicita confirmação. Nenhum item é sobrescrito silenciosamente. A troca é validada contra o estado que foi mostrado antes de escrever.
 - Antes de restaurar o backup, preserve uma cópia do arquivo original. Uma substituição explicitamente confirmada pode remover itens diferentes em cada save.
+
+## v0.6.0 — Baús da Prefeitura
+
+- Uma seção própria abaixo do inventário com um menu para escolher **Baú 1, Baú 2, Baú 3 ou Baú 4**; o conteúdo é mostrado em uma grade de 20 espaços.
+- Leitura independente de `worldContainers: vault, vault2, vault3, vault4` e dos campos `hasVault, hasVault2, hasVault3, hasVault4`, sem confundir baús e mochila.
+- Toque no item para acrescentar unidades ou cópias, definir a quantidade de um item empilhável, excluir uma ocorrência específica ou substituí-lo; toque no espaço vazio para selecionar um item no catálogo.
+- Os **quatro saves** são editados, com validação de que os outros baús e a mochila não foram afetados. Itens não empilháveis exigem um espaço por unidade.
+- Se a posição estiver ocupada em outro save, o aplicativo mostra o conteúdo de **cada save** e só substitui mediante confirmação. Editar um baú cheio sem espaços vazios exige substituição consciente.
+- O botão **Desbloquear baú** ativa o indicador daquele baú nos saves, sem pagar ouro no jogo. É uma operação separada e confirmada.
+- Mantenha o `EK.bak` original seguro. O estado dos baús no jogo só muda depois de exportar e restaurar o backup modificado.
