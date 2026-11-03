@@ -605,7 +605,7 @@ object EkBackup {
                 for (edit in plan.slotEdits) {
                     val prevStacks = prev.inventorySlots.filter { it.id == edit.expectedId }
                     val nextStacks = now.inventorySlots.filter { it.id == edit.expectedId }
-                    require(prevStacks.size - if (edit.quantity == 0) 1 else 0 == nextStacks.size) {
+                    require(prevStacks.size - (if (edit.quantity == 0) 1 else 0) == nextStacks.size) {
                         "Quantidade de stacks não confere após edição do inventário"
                     }
                     val oldTotal = prev.inventory[edit.expectedId] ?: 0
