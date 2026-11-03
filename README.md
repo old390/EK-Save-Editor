@@ -1,30 +1,35 @@
-# EK Save Editor v0.4 — feito por old390
+# EK Save Editor v0.5.0 — feito por old390
 
-Editor de backups **Exiled Kingdoms**, Android, Kotlin. Independente dos criadores do jogo.
+Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Não afiliado aos criadores do jogo.
 
-## Como usar
-1. No jogo, crie um **backup atualizado**.
-2. Importe **EK.bak** com o seletor de arquivos. Não requer Shizuku nem root.
-3. Edite ouro; adicione armas, itens e poções por uma busca offline; some pontos livres de atributos e habilidades e, se houver companheiro ativo, edite também os pontos dele.
-4. Cada aplicação altera **todos os saves** do EK.bak. A tela mostra um inventário de referência (preferência pelo auto.sav), com nomes em vez de IDs. É possível conferir espaços livres mínimos entre os saves.
-5. Guarde uma cópia do backup original e exporte o **EK.bak** modificado.
-6. Copie o backup para `/storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak`, depois **restaure pelo menu do jogo**. O editor não substitui saves ativos.
+## Uso
 
-## Novidades da v0.4
-- Remoção do seletor de saves: sempre modifica todos.
-- Busca por nome ou ID, com **724 registros**, incluindo **45 poções e consumíveis**.
-- Pontos acumulativos e botão para **zerar apenas os pontos livres de atributos**, sem apagar atributos já distribuídos.
-- Campos de companheiro somente quando existe um companheiro ativo.
-- Preservação da edição na rotação da tela e recuperação de sessão.
-- Bloqueio preventivo da inserção de itens quando um save não tem espaço disponível.
+1. Crie um **backup atualizado dentro do jogo**. Preserve uma cópia original antes de editar.
+2. Importe `EK.bak` pelo seletor de arquivos do Android. Não requer root nem Shizuku.
+3. No inventário visual, toque num item para alterar a quantidade ou excluir **um stack**. O app verifica o ID do item em cada save; caso algum não corresponda, a operação é cancelada.
+4. Some pontos de ouro, atributos ou habilidades do personagem principal e do companheiro ativo. Os saldos reais são calculados pelo nível, extras recebidos e gastos. O custo das habilidades é consultado em uma tabela de 76 entradas derivada da wiki oficial. Habilidades não catalogadas mostram saldo indisponível, sem inventar um valor.
+5. Use **Conferir valores de todos os saves**. Cada modificação aplica-se a todos os saves presentes no `EK.bak`.
+6. Exporte o `EK.bak` modificado. Copie-o para `/storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak` e **restaure o backup pelo menu do próprio jogo**.
 
-## Catálogo
-Arquivo offline `app/src/main/assets/ek_items.tsv`. Dados extraídos de uma discussão comunitária de setembro de 2021:
-https://steamcommunity.com/app/788270/discussions/0/2515771867786715062/
+**Importante:** o editor altera o arquivo de backup; não edita os saves ativos diretamente. Confirme o nome exato `EK.bak` ao copiar para a pasta do jogo.
 
-A lista não é oficial e pode não incluir itens introduzidos posteriormente. Algumas poções do catálogo são outros tipos de consumíveis. Itens exclusivos ou não empilháveis podem exigir testes específicos no jogo.
+## Segurança e limitações
 
-## Segurança e desenvolvimento
-O app só exporta backups, preservando os demais arquivos e os saves originais em memória. Tenha uma cópia separada antes da restauração. A compilação executa os testes automatizados `:app:testDebugUnitTest` antes de criar `app-debug.apk`.
+- Alterações são transacionais: se um save tiver inventário incompatível ou pontuação fora do intervalo, nenhum dos saves é alterado naquele comando.
+- Excluir item remove o stack encontrado sem deslocar os demais itens. Quantidade é definida por stack e pode não ser válida para itens não empilháveis.
+- Os botões de zeramento preservam pontos já distribuídos e habilidades aprendidas. Quando o saldo livre não puder ser zerado sem interferir nos pontos gastos ou a habilidade for desconhecida, a operação será recusada.
+- A grade representa **um save de referência** com ícones simbólicos (não as imagens originais do jogo), mas cada mudança é validada em todos os saves.
+- Algumas habilidades ou dados de mods podem ter custos diferentes dos da wiki; verifique no jogo.
+- A versão de Android foi compilada e testada automaticamente, mas ainda requer validação da restauração num dispositivo real.
 
-Criado por old390 — https://github.com/old390/EK-Save-Editor
+## Referências
+
+- Progressão: https://www.exiledkingdoms.com/wiki/index.php/Level
+- Custo dos níveis de habilidades: https://www.exiledkingdoms.com/wiki/index.php?title=Skill_Table
+- Catálogo comunitário de itens (2021): https://steamcommunity.com/app/788270/discussions/0/2515771867786715062/
+
+## Compilação e testes
+
+Android SDK 35, JDK 17, Gradle 8.9. O GitHub Actions executa testes unitários e `:app:assembleDebug` e publica `app-debug.apk` como artefato.
+
+Criado por old390: https://github.com/old390/EK-Save-Editor

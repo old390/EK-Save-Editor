@@ -496,4 +496,31 @@ class EkBackupTest {
             slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 0))))
     }
 
+
+    @Test fun combinedPlayerCompanionEditsReachAllFourSaves() {
+        val original = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                for (name in listOf("auto.sav", "auto2.sav", "game.sav", "game2.sav")) {
+                    zip.putNextEntry(ZipEntry("saves/0/$name"))
+                    zip.write(companionWithProgress())
+                    zip.closeEntry()
+                }
+            }
+        }.toByteArray()
+        val paths = EkBackup.inspect(original).map { it.path }.toSet()
+        assertEquals(4, paths.size)
+        val modified = EkBackup.apply(original, EkBackup.EditPlan(paths,
+            traitDelta = 20, skillDelta = 20, companionTraitDelta = 5, companionSkillDelta = 10))
+        val infos = EkBackup.inspect(modified)
+        assertEquals(paths, infos.map { it.path }.toSet())
+        assertTrue(infos.all { it.freeTraitPoints == 20 && it.freeSkillPoints == 23 })
+        assertTrue(infos.all { it.companion?.freeTraitPoints == 8 && it.companion.freeSkillPoints == 10 })
+        val reset = EkBackup.apply(modified, EkBackup.EditPlan(paths,
+            resetTraits = true, resetSkills = true,
+            resetCompanionTraits = true, resetCompanionSkills = true))
+        val zeros = EkBackup.inspect(reset)
+        assertTrue(zeros.all { it.freeTraitPoints == 0 && it.freeSkillPoints == 0 })
+        assertTrue(zeros.all { it.companion?.freeTraitPoints == 0 && it.companion.freeSkillPoints == 0 })
+    }
+
 }
