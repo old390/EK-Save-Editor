@@ -470,7 +470,7 @@ class MainActivity : Activity() {
             }
             "Vault $number · $state"
         }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Choose vault da Prefeitura")
+        AlertDialog.Builder(this).setTitle("Choose Town Hall vault")
             .setSingleChoiceItems(labels, selectedVault - 1) { dialog, choice ->
                 selectedVault = choice + 1
                 dialog.dismiss()
@@ -653,7 +653,7 @@ class MainActivity : Activity() {
             layout.addView(action(name) { dialog.dismiss(); handler() }, margin(2, 4))
         }
         val item = ItemCatalog.Item(slot.id, label, "")
-        option(if (stackable) "＋  Add unidades" else "＋  Duplicate copy") {
+        option(if (stackable) "＋  Add units" else "＋  Duplicate copy") {
             askVaultItemQuantity("Add $label", item) { n ->
                 applyVaultChange("Vault $vault: +$n $label",
                     VaultStorage.Change(vault, VaultStorage.Action.ADD,
@@ -712,7 +712,7 @@ class MainActivity : Activity() {
             for ((index, slot) in group) {
                 val occupied = slot.id != 0
                 val label = if (occupied) catalog.name(slot.id) else "Empty"
-                // Button real: evita perder toques nos TextViews internos do antigo tile.
+                // Real Button: prevents nested TextViews from swallowing taps on the old tile.
                 val glyph = iconFor(label, occupied)
                 val display = "$glyph\n$label" +
                     if (occupied && slot.count > 1) "\n×${slot.count}" else ""
