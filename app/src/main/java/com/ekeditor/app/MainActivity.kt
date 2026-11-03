@@ -173,7 +173,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.5.2", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.5.3", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
