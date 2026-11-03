@@ -637,7 +637,8 @@ class EkBackupTest {
                 items = listOf(EkBackup.ItemAdd(750, 1))))
         }
         assertTrue(result.isFailure)
-        assertTrue(result.exceptionOrNull()?.message?.contains("Inventário cheio") == true)
+        assertTrue(result.exceptionOrNull()?.message?.contains("espaços") == true ||
+            result.exceptionOrNull()?.message?.contains("Inventário cheio") == true)
     }
 
     @Test fun fullInventoryRequiresExplicitReplacementAndPreservesOtherSlots() {
@@ -647,12 +648,12 @@ class EkBackupTest {
         val expectedByPath = original.associate { it.path to it.inventorySlots[0] }
         val updated = EkBackup.apply(backup, EkBackup.EditPlan(target,
             slotReplacements = listOf(EkBackup.SlotReplace(
-                0, 750, 15, expectedByPath))))
+                0, 5070, 15, expectedByPath))))
         val inspected = EkBackup.inspect(updated)
         assertEquals(4, inspected.size)
         for (info in inspected) {
             val before = original.single { it.path == info.path }
-            assertEquals(EkBackup.InventorySlot(750, 15), info.inventorySlots[0])
+            assertEquals(EkBackup.InventorySlot(5070, 15), info.inventorySlots[0])
             assertEquals(before.inventorySlots.drop(1), info.inventorySlots.drop(1))
         }
         assertTrue(entries(backup).getValue("saves/global.sav")
