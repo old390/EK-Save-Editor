@@ -20,9 +20,18 @@ object EkBackup {
     private val backpackPattern = Regex("""(?m)^(\tbackpack: \{\s*\n\t\titemList: \[)([^\]]*)(\]\s*\n\t\tstackUnits: \[)([^\]]*)(\])""")
     private val spentTraitPattern = Regex("""(?m)^\t{4}spentPoints:\s*\[([^\]]*)\]""")
     private val playerLevelPattern = Regex("""(?m)^\t{4}cached_level:\s*(\d+)\s*$""")
+    private val anySpentTraitPattern = Regex("""(?m)^\t+spentPoints:\s*\[([^\]]*)\]""")
+    private val anyLevelPattern = Regex("""(?m)^\t+cached_level:\s*(\d+)\s*$""")
+    private val learnedSkillLevelPattern = Regex("""(?m)^\t+level:\s*(\d+)\s*$""")
+    private val learnedSkillIdPattern = Regex("""(?m)^\t+skillID:\s*(\S+)\s*$""")
     private val activeCompanionPattern = Regex("""(?m)^\t\tactiveCompanion:\s*([^\r\n]*)""")
 
-    data class CompanionInfo(val name: String, val traitPoints: Int, val skillPoints: Int)
+    data class CompanionInfo(
+        val name: String, val traitPoints: Int, val skillPoints: Int,
+        val freeTraitPoints: Int? = null, val freeSkillPoints: Int? = null,
+        val level: Int? = null, val spentTraitPoints: Int? = null,
+        val spentSkillPoints: Int? = null
+    )
     data class SaveInfo(
         val path: String,
         val hero: String,
@@ -37,17 +46,22 @@ object EkBackup {
         /** Pontos disponíveis calculados: total por nível + extras − gastos. */
         val freeTraitPoints: Int? = null,
         val characterLevel: Int? = null,
-        val spentTraitPoints: Int? = null
+        val spentTraitPoints: Int? = null,
+        val freeSkillPoints: Int? = null,
+        val spentSkillPoints: Int? = null
     )
     /** Item na posição real do inventário, preservando inclusive espaços vazios. */
     data class InventorySlot(val id: Int, val count: Int)
     data class ItemAdd(val id: Int, val count: Int = 1)
+    /** Um stack por ação. Confere o ID em todos os saves antes de substituir. */
+    data class SlotEdit(val index: Int, val expectedId: Int, val expectedCount: Int, val quantity: Int)
     data class EditPlan(
         val targetPaths: Set<String>,
         val gold: Long? = null,
         val traitPoints: Int? = null,
         val skillPoints: Int? = null,
         val items: List<ItemAdd> = emptyList(),
+        val slotEdits: List<SlotEdit> = emptyList(),
         val traitDelta: Int? = null,
         val skillDelta: Int? = null,
         val resetTraits: Boolean = false,
@@ -60,7 +74,7 @@ object EkBackup {
         fun validate() {
             require(targetPaths.isNotEmpty()) { "Backup sem saves" }
             require(gold != null || traitPoints != null || skillPoints != null || items.isNotEmpty() ||
-                traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
+                slotEdits.isNotEmpty() || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
                 companionSkillDelta != null || resetCompanionTraits || resetCompanionSkills) { "Nenhuma alteração selecionada" }
             require(gold == null || gold in 0..999_999_999) { "Ouro fora do intervalo" }
             require(traitPoints == null || traitPoints in 0..999) { "Atributos fora do intervalo" }
@@ -74,6 +88,10 @@ object EkBackup {
             }
             for (item in items) {
                 require(item.id in 1..999_999 && item.count in 1..999) { "ID ou quantidade de item inválidos" }
+            }
+            for (edit in slotEdits) {
+                require(edit.index >= 0 && edit.expectedId in 1..999_999 &&
+                    edit.expectedCount in 1..999 && edit.quantity in 0..999) { "Edição de item inválida" }
             }
         }
     }
@@ -172,6 +190,136 @@ object EkBackup {
         return TraitBalance(level, byLevel, extra, spent, byLevel + extra - spent)
     }
 
+    /**
+     * Custos por nível conforme Skill Table da wiki oficial.
+     * Habilidades desconhecidas => saldo real desconhecido, nunca presumido.
+     */
+    private val skillCosts: Map<String, List<Int>> = """
+        arbenos_might|1,2,3
+        arcane_blade|2,2,2,2
+        arcanist|2,2,2
+        archery|1,2,3
+        assassinate|1,2,3
+        bash|1,1,2
+        battle_prayer|1,2,3
+        battle_rage|1,2,3
+        beast_master|1,2,2
+        bloodlust|1,2,3
+        body_development|1,2,3
+        charge|1,1,2,3
+        cleave|1,2,3
+        combustion|2,2,3
+        crusader|1,2,3
+        death_cloud|2,2,2
+        death_ward|1,1,1
+        disintegrate|1,2,3
+        duel|1,2,3
+        dungeoneering|1,1,1
+        earth_mastery|2,2,3
+        evasion|1,2,3
+        explosive_traps|1,2,3
+        extra_recovery|3,3
+        fire_mastery|2,2,2
+        fire_ward|1,1,1
+        fireball|1,2,2,2
+        flames_of_faith|1,2,3
+        flurry|1,2,3
+        fury|1,2,2
+        gate|1,1
+        gossip|1,1,1
+        guardian_wolf|2,2,2
+        heal_wounds|1,2,3
+        heavyhand|1,2,3
+        holy_shield|1,2,2,2
+        ice_mastery|1,2,3
+        ice_storm|1,2,2,2
+        ice_ward|1,1,1
+        infantry_training|2,3
+        intervention|1,1,1
+        kick|1,1,2
+        lesser_summoning|2,2
+        lightning_bolt|1,2,2,2
+        mage_armor|1,2,2,2
+        mage_barrier|1,2,3
+        magical_training|1,1,1
+        mana_surge|1,2,3
+        massive_criticals|1,2,3
+        nivarias_barrier|1,1,2
+        nivaria_s_barrier|1,1,2
+        poison_master|1,2,3
+        precision_shots|1,2,3
+        precision_strikes|1,2,3
+        rapid_fire|1,2,3
+        resilience|1,2,3
+        retribution|2,3
+        sacred_fire|1,2,2
+        shield_expert|1,1,1
+        shock_ward|1,1,1
+        smoke_bomb|2,2,2
+        sneak_attack|1,2,3
+        spiritual_ward|1,1,1
+        sprint|1,1,1
+        stab|1,2,3,3
+        staff_mastery|1,2,2,3
+        stealth|1,2,3
+        summoner|1,1,2
+        thelumes_wisdom|1,1
+        toxic_ward|1,1,1
+        trap_master|1,2,3
+        turn_undead|1,2,3
+        two_handed_expert|1,2,3
+        vampiric_blade|2,3,4
+        wand_mastery|1,2,2,3
+        whirlwind|1,2,3,3
+    """.trimIndent().lines().filter { it.contains('|') }.associate { row ->
+        val (name, values) = row.split('|', limit = 2)
+        name to values.split(',').map { it.toInt() }
+    }
+
+    private data class SkillBalance(
+        val level: Int, val byLevel: Int, val extra: Int, val spent: Int, val free: Int
+    )
+
+    private fun skillBalance(character: String, companion: Boolean): SkillBalance? {
+        val level = anyLevelPattern.find(character)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        if (level !in 1..999 || !character.contains("skillSet: {")) return null
+        val learned = arrayObjects(character, "characterSkills: [", 0, character.length)
+        var spent = 0
+        for (range in learned) {
+            val learnedSkill = character.substring(range)
+            val id = learnedSkillIdPattern.find(learnedSkill)?.groupValues?.get(1) ?: return null
+            val rank = learnedSkillLevelPattern.find(learnedSkill)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+            val price = skillCosts[id] ?: return null
+            if (rank !in 1..price.size) return null
+            spent += price.take(rank).sum()
+        }
+        val extra = anySkillPattern.find(character)?.groupValues?.get(2)?.toIntOrNull() ?: 0
+        val byLevel = if (companion) level else 1 + (level - 1) * 2
+        return SkillBalance(level, byLevel, extra, spent, byLevel + extra - spent)
+    }
+
+    private fun companionTraitBalance(character: String): TraitBalance? {
+        val level = anyLevelPattern.find(character)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        if (level !in 1..999) return null
+        val spentRaw = anySpentTraitPattern.find(character)?.groupValues?.get(1) ?: return null
+        val points = spentRaw.split(',').map { it.trim().toIntOrNull() ?: return null }
+        if (points.size != 6 || points.any { it < 0 }) return null
+        val spent = points.sum()
+        val bonus = anyTraitPattern.find(character)?.groupValues?.get(2)?.toIntOrNull() ?: 0
+        val byLevel = 4 + level - 1
+        return TraitBalance(level, byLevel, bonus, spent, byLevel + bonus - spent)
+    }
+
+    /** Insere o campo extra/bonus ausente no bloco correto sem remover os outros. */
+    private fun updateBonusField(character: String, regex: Regex, field: String, marker: String, value: Int): String {
+        if (regex.containsMatchIn(character)) return replaceNumber(character, regex, value)
+        val range = block(character, marker) ?: error("Bloco $marker ausente no personagem")
+        val lineBegin = character.lastIndexOf('\n', range.first).let { if (it < 0) 0 else it + 1 }
+        val indent = character.substring(lineBegin, range.first).takeWhile { it == '\t' }
+        val insertion = "\t$field: $value\n$indent"
+        return character.replaceRange(range.last, range.last, insertion)
+    }
+
     private fun numbers(raw: String): MutableList<Int> = raw.split(',').map { it.trim().toInt() }.toMutableList()
     private fun backpack(text: String): MatchResult = backpackPattern.find(text) ?: error("Inventário não encontrado")
 
@@ -214,10 +362,17 @@ object EkBackup {
     private fun companionInfo(text: String): CompanionInfo? {
         val (_, range) = activeCompanion(text) ?: return null
         val obj = text.substring(range)
+        val traits = companionTraitBalance(obj)
+        val skills = skillBalance(obj, true)
         return CompanionInfo(
             Regex("""(?m)^\t+name:\s*(.+)$""").find(obj)?.groupValues?.get(1)?.trim() ?: "Companheiro",
-            one(obj, anyTraitPattern, "atributos do companheiro"),
-            one(obj, anySkillPattern, "habilidades do companheiro")
+            anyTraitPattern.find(obj)?.groupValues?.get(2)?.toIntOrNull() ?: 0,
+            anySkillPattern.find(obj)?.groupValues?.get(2)?.toIntOrNull() ?: 0,
+            freeTraitPoints = traits?.free,
+            freeSkillPoints = skills?.free,
+            level = traits?.level ?: skills?.level,
+            spentTraitPoints = traits?.spent,
+            spentSkillPoints = skills?.spent
         )
     }
     fun inspect(data: ByteArray): List<SaveInfo> = archive(data).filter { savePath.matches(it.entry.name) }.map { item ->
@@ -228,6 +383,7 @@ object EkBackup {
         val units = numbers(pack.groupValues[4])
         require(ids.size == units.size) { "Inventário incompatível" }
         val balance = playerTraitBalance(player)
+        val skillsBalance = skillBalance(player, false)
         SaveInfo(
             path = item.entry.name,
             hero = Regex("""(?m)^\t\tname: (.*)$""").find(player)?.groupValues?.get(1)?.trim() ?: "Personagem",
@@ -242,7 +398,9 @@ object EkBackup {
             inventorySlots = ids.zip(units).map { (id, count) -> InventorySlot(id, count) },
             freeTraitPoints = balance?.free,
             characterLevel = balance?.level,
-            spentTraitPoints = balance?.spent
+            spentTraitPoints = balance?.spent,
+            freeSkillPoints = skillsBalance?.free,
+            spentSkillPoints = skillsBalance?.spent
         )
     }.also { require(it.isNotEmpty()) { "Nenhum save reconhecido no EK.bak" } }
 
