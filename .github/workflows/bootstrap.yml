@@ -1,43 +1,24 @@
-name: Publicar e compilar EK Save Editor
+name: Compilar e testar EK Save Editor
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/bootstrap.yml'
+      - 'app/**'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   publish-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extrair projeto Android do pacote inicial
-        shell: bash
+      - name: Verificar arquivos do editor
         run: |
-          set -euo pipefail
-          base64 --decode .bootstrap/ek-source.tar.xz.base64 > /tmp/ek-source.tar.xz
-          tar -xJf /tmp/ek-source.tar.xz
-          base64 --decode .bootstrap/ek-v03.delta.b64 > /tmp/ek-v03.tar.xz
-          tar -xJf /tmp/ek-v03.tar.xz
-          cat .bootstrap/ek-v04.part{1..6} | base64 --decode > /tmp/ek-v04.tar.xz
-          echo "471484ad237fcf11a17b19d37703cc638fc3e7e9e8b5462291fdffe0ea2f2b0b  /tmp/ek-v04.tar.xz" | sha256sum -c -
-          tar -xJf /tmp/ek-v04.tar.xz
-          python3 tools/generate_catalog.py
-          test "$(grep -cv '^#' app/src/main/assets/ek_items.tsv)" -ge 520
-          rm -f app/src/main/java/com/ekeditor/app/EkFileUserService.kt
-          rm -f app/src/main/aidl/com/ekeditor/app/IEkFileService.aidl
-          rm -f .github/workflows/android.yml
+          test -f app/src/main/java/com/ekeditor/app/MainActivity.kt
+          test -f app/src/main/java/com/ekeditor/app/EkBackup.kt
           test -f app/build.gradle.kts
-          ! grep -q 'dev.rikka.shizuku' app/build.gradle.kts
-          git add -A README.md TESTES.md app build.gradle.kts settings.gradle.kts gradle.properties tools catalogo
-          if ! git diff --cached --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "EK Save Editor v0.4: catalogo, companheiros, todos os saves e rotacao"
-            git push
-          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
