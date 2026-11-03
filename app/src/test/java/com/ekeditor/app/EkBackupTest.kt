@@ -433,14 +433,14 @@ class EkBackupTest {
         val data = zipSave(companionWithProgress())
         val paths = setOf("saves/0/auto.sav")
         val before = EkBackup.inspect(data).single().companion!!
-        assertEquals(3, before.freeTraitPoints)
+        assertEquals(0, before.freeTraitPoints)
         assertEquals(0, before.freeSkillPoints)
         assertEquals(24, before.spentTraitPoints)
         assertEquals(16, before.spentSkillPoints)
         val changed = EkBackup.apply(data, EkBackup.EditPlan(paths,
             companionTraitDelta = 20, companionSkillDelta = 5))
         val after = EkBackup.inspect(changed).single().companion!!
-        assertEquals(23, after.freeTraitPoints)
+        assertEquals(20, after.freeTraitPoints)
         assertEquals(5, after.freeSkillPoints)
         val reset = EkBackup.apply(changed, EkBackup.EditPlan(paths,
             resetCompanionTraits = true, resetCompanionSkills = true))
@@ -514,13 +514,89 @@ class EkBackupTest {
         val infos = EkBackup.inspect(modified)
         assertEquals(paths, infos.map { it.path }.toSet())
         assertTrue(infos.all { it.freeTraitPoints == 20 && it.freeSkillPoints == 23 })
-        assertTrue(infos.all { it.companion?.freeTraitPoints == 8 && it.companion?.freeSkillPoints == 10 })
+        assertTrue(infos.all { it.companion?.freeTraitPoints == 5 && it.companion?.freeSkillPoints == 10 })
         val reset = EkBackup.apply(modified, EkBackup.EditPlan(paths,
             resetTraits = true, resetSkills = true,
             resetCompanionTraits = true, resetCompanionSkills = true))
         val zeros = EkBackup.inspect(reset)
         assertTrue(zeros.all { it.freeTraitPoints == 0 && it.freeSkillPoints == 0 })
         assertTrue(zeros.all { it.companion?.freeTraitPoints == 0 && it.companion?.freeSkillPoints == 0 })
+    }
+
+
+    /** Regressão com dados equivalentes aos quatro saves reais: nível 14, 10 extras, 24 gastos. */
+    @Test fun grissendaLevel14ResetThenPlusTenReallyGivesTenNotSeven() {
+        val initial = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                for (name in listOf("auto.sav", "auto2.sav", "game.sav", "game2.sav")) {
+                    zip.putNextEntry(ZipEntry("saves/0/$name"))
+                    zip.write(companionWithProgress())
+                    zip.closeEntry()
+                }
+            }
+        }.toByteArray()
+        val paths = EkBackup.inspect(initial).map { it.path }.toSet()
+        assertTrue(EkBackup.inspect(initial).all { it.companion?.level == 14 })
+        assertTrue(EkBackup.inspect(initial).all { it.companion?.freeTraitPoints == 0 })
+        val first = EkBackup.apply(initial, EkBackup.EditPlan(paths, companionTraitDelta = 10))
+        assertTrue(EkBackup.inspect(first).all { it.companion?.freeTraitPoints == 10 })
+        val reset = EkBackup.apply(first, EkBackup.EditPlan(paths, resetCompanionTraits = true))
+        assertTrue(EkBackup.inspect(reset).all { it.companion?.freeTraitPoints == 0 })
+        val addedAgain = EkBackup.apply(reset, EkBackup.EditPlan(paths, companionTraitDelta = 10))
+        assertTrue(EkBackup.inspect(addedAgain).all { it.companion?.freeTraitPoints == 10 })
+        assertTrue(EkBackup.inspect(addedAgain).all { it.companion?.spentTraitPoints == 24 })
+    }
+
+    @Test fun resetOfOldV05CompanionSaveWithNegativeThreeFreePointsRecoversToZero() {
+        val oldState = String(Base64.getDecoder().decode(companionWithProgress()), Charsets.UTF_8)
+            .replace("extraTraitPoints: 10", "extraTraitPoints: 7")
+        val source = zipSave(Base64.getEncoder().encode(oldState.toByteArray(Charsets.UTF_8)))
+        val target = setOf("saves/0/auto.sav")
+        assertEquals(-3, EkBackup.inspect(source).single().companion?.freeTraitPoints)
+        val corrected = EkBackup.apply(source, EkBackup.EditPlan(target, resetCompanionTraits = true))
+        assertEquals(0, EkBackup.inspect(corrected).single().companion?.freeTraitPoints)
+        val withTen = EkBackup.apply(corrected, EkBackup.EditPlan(target, companionTraitDelta = 10))
+        assertEquals(10, EkBackup.inspect(withTen).single().companion?.freeTraitPoints)
+    }
+
+    @Test fun clickingEmptyGridSlotAddsItemToSameCellOnAllSaves() {
+        val original = archiveWithShiftedItem()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val modified = EkBackup.apply(original, EkBackup.EditPlan(all,
+            slotInserts = listOf(EkBackup.SlotInsert(2, 750, 1))))
+        val after = EkBackup.inspect(modified)
+        assertTrue(after.all { it.inventorySlots[2].id == 750 && it.inventorySlots[2].count == 1 })
+        assertEquals(1, after.single { it.path.endsWith("game.sav") }.inventory[554])
+        assertTrue(entries(original).getValue("saves/global.sav")
+            .contentEquals(entries(modified).getValue("saves/global.sav")))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun insertingIntoCellOccupiedInOneSaveIsBlockedForEveryone() {
+        val original = archiveWithShiftedItem()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        EkBackup.apply(original, EkBackup.EditPlan(all,
+            slotInserts = listOf(EkBackup.SlotInsert(1, 750, 3))))
+    }
+
+    @Test fun tappingOccupiedStackCanIncreaseQuantityOnAllSaves() {
+        val original = archiveWithShiftedItem()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val modified = EkBackup.apply(original, EkBackup.EditPlan(all,
+            slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 5, addQuantity = true))))
+        assertTrue(EkBackup.inspect(modified).all { it.inventory[5070] == 12 })
+        val twice = EkBackup.apply(modified, EkBackup.EditPlan(all,
+            slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 12, 10, addQuantity = true))))
+        assertTrue(EkBackup.inspect(twice).all { it.inventory[5070] == 22 })
+        assertEquals(1, EkBackup.inspect(twice).single { it.path.endsWith("game.sav") }.inventory[554])
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun raisingStackBeyond999IsBlockedBeforeAnyOutputIsReturned() {
+        val original = archiveWithShiftedItem()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        EkBackup.apply(original, EkBackup.EditPlan(all,
+            slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 999, addQuantity = true))))
     }
 
 }

@@ -1,4 +1,4 @@
-# EK Save Editor v0.5.0 — feito por old390
+# EK Save Editor v0.5.1 — feito por old390
 
 Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Não afiliado aos criadores do jogo.
 
@@ -6,8 +6,8 @@ Editor Android independente para backups `EK.bak` do jogo *Exiled Kingdoms*. Nã
 
 1. Crie um **backup atualizado dentro do jogo**. Preserve uma cópia original antes de editar.
 2. Importe `EK.bak` pelo seletor de arquivos do Android. Não requer root nem Shizuku.
-3. No inventário visual, toque num item para alterar a quantidade ou excluir **um stack**. O app verifica o ID do item em cada save; caso algum não corresponda, a operação é cancelada.
-4. Some pontos de ouro, atributos ou habilidades do personagem principal e do companheiro ativo. Os saldos reais são calculados pelo nível, extras recebidos e gastos. O custo das habilidades é consultado em uma tabela de 76 entradas derivada da wiki oficial. Habilidades não catalogadas mostram saldo indisponível, sem inventar um valor.
+3. No inventário visual, toque num item para **somar quantidade**, **definir quantidade** ou **excluir um stack**. Toque num **espaço vazio** para buscar um item por nome/ID, definir a quantidade e adicioná-lo naquela célula (desde que esteja vazia em todos os saves). Se houver divergência entre saves, a ação será cancelada.
+4. Some pontos de ouro, atributos ou habilidades do personagem principal e do companheiro ativo. A correção v0.5.1 reconhece que o companheiro não recebe quatro pontos iniciais: por exemplo, no nível 14, com 10 extras e 24 gastos, há 0 livres; após somar 10, há 10 livres. Os saldos reais são calculados pelo nível, extras recebidos e gastos. O custo das habilidades é consultado em uma tabela de 76 entradas derivada da wiki oficial. Habilidades não catalogadas mostram saldo indisponível, sem inventar um valor.
 5. Use **Conferir valores de todos os saves**. Cada modificação aplica-se a todos os saves presentes no `EK.bak`.
 6. Exporte o `EK.bak` modificado. Copie-o para `/storage/emulated/0/Android/data/net.fdgames.ek.android/files/EK.bak` e **restaure o backup pelo menu do próprio jogo**.
 
