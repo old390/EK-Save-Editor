@@ -502,6 +502,33 @@ object EkBackup {
         return candidates.single()
     }
 
+    /**
+     * Item unitário: cada unidade precisa de um espaço independente.
+     * A alocação é transacional; capacidade insuficiente cancela todo o EditPlan.
+     */
+    private fun addSingleCopies(
+        ids: MutableList<Int>, units: MutableList<Int>, id: Int, count: Int, path: String,
+        firstSlot: Int? = null
+    ) {
+        require(!ItemRules.isStackable(id)) { "Item deveria ser empilhável" }
+        val empty = ids.indices.filter { ids[it] == 0 }.toMutableList()
+        if (firstSlot != null) {
+            require(firstSlot in empty) {
+                "O espaço ${firstSlot + 1} não está vazio em $path"
+            }
+            empty.remove(firstSlot)
+            empty.add(0, firstSlot)
+        }
+        require(empty.size >= count) {
+            "Item unitário exige $count espaços, mas apenas ${empty.size} estão livres em $path. " +
+                "Não coloque várias unidades de tomos ou equipamentos no mesmo espaço."
+        }
+        for (i in empty.take(count)) {
+            ids[i] = id
+            units[i] = 1
+        }
+    }
+
     private fun rewrite(text: String, plan: EditPlan, path: String): String {
         val playerRange = playerBounds(text)
         var player = text.substring(playerRange)
@@ -539,47 +566,61 @@ object EkBackup {
             require(ids.size == units.size) { "Inventário incompatível" }
             for (edit in plan.slotEdits) {
                 val index = locateItem(ids, units, edit)
-                if (index == null) {
-                    // O item do save de referência ainda pode não existir em outro
-                    // save. Inserir nele sem apagar outros itens, se houver espaço.
+                val stackable = ItemRules.isStackable(edit.expectedId)
+                if (edit.addQuantity && !stackable) {
+                    // +N em itens unitários cria N espaços de 1 unidade cada.
+                    addSingleCopies(ids, units, edit.expectedId, edit.quantity, path)
+                } else if (index == null) {
                     if (edit.quantity == 0) continue
-                    val free = ids.indexOf(0)
-                    require(free >= 0) {
-                        "Inventário cheio em $path e item ID ${edit.expectedId} ausente. " +
-                            "Para substituir um item, escolha explicitamente um espaço na grade."
+                    if (!stackable) {
+                        ItemRules.ensureSlotQuantity(edit.expectedId, edit.quantity)
+                        addSingleCopies(ids, units, edit.expectedId, 1, path)
+                    } else {
+                        val free = ids.indexOf(0)
+                        require(free >= 0) {
+                            "Inventário cheio em $path; não há espaço para ID ${edit.expectedId}"
+                        }
+                        ids[free] = edit.expectedId
+                        units[free] = edit.quantity
                     }
-                    ids[free] = edit.expectedId
-                    units[free] = edit.quantity
                 } else if (edit.addQuantity) {
-                    require(units[index].toLong() + edit.quantity <= 999L) {
-                        "A quantidade do item ultrapassaria 999 em $path"
+                    require(units[index].toLong() + edit.quantity <= 999) {
+                        "O item passaria de 999 unidades em $path"
                     }
                     units[index] += edit.quantity
                 } else if (edit.quantity == 0) {
                     ids[index] = 0
                     units[index] = 0
                 } else {
+                    ItemRules.ensureSlotQuantity(edit.expectedId, edit.quantity)
                     units[index] = edit.quantity
                 }
             }
             for (insert in plan.slotInserts) {
                 require(insert.index in ids.indices && ids[insert.index] == 0) {
-                    "Espaço ${insert.index + 1} está ocupado em $path. " +
-                        "Para substituir, confirme os itens que serão removidos na grade."
+                    "Espaço ${insert.index + 1} ocupado em $path; escolha substituição com confirmação."
                 }
-                ids[insert.index] = insert.itemId
-                units[insert.index] = insert.count
+                if (!ItemRules.isStackable(insert.itemId)) {
+                    addSingleCopies(ids, units, insert.itemId, insert.count, path, insert.index)
+                } else {
+                    ids[insert.index] = insert.itemId
+                    units[insert.index] = insert.count
+                }
             }
             for ((id, count) in plan.items) {
-                val slot = ids.indexOf(id).takeIf { it >= 0 } ?: ids.indexOf(0)
-                require(slot >= 0) {
-                    "Inventário cheio em $path. O item não foi adicionado. " +
-                        "Escolha um espaço para substituir com confirmação."
+                if (!ItemRules.isStackable(id)) {
+                    addSingleCopies(ids, units, id, count, path)
+                } else {
+                    val slot = ids.indexOf(id).takeIf { it >= 0 } ?: ids.indexOf(0)
+                    require(slot >= 0) {
+                        "Inventário cheio em $path. Escolha um espaço e confirme a substituição."
+                    }
+                    ids[slot] = id
+                    units[slot] = count
                 }
-                ids[slot] = id
-                units[slot] = count
             }
             for (replacement in plan.slotReplacements) {
+                ItemRules.ensureSlotQuantity(replacement.itemId, replacement.count)
                 val expected = replacement.expectedByPath[path]
                     ?: error("Save não previsto na confirmação: $path")
                 require(replacement.index in ids.indices) { "Espaço inválido em $path" }
@@ -698,11 +739,17 @@ object EkBackup {
                     }
                 }
                 for (insert in plan.slotInserts) {
-                    val beforeSlot = prev.inventorySlots.getOrNull(insert.index)
-                    val afterSlot = now.inventorySlots.getOrNull(insert.index)
-                    require(beforeSlot?.id == 0 && afterSlot?.id == insert.itemId &&
-                        afterSlot.count == insert.count) {
-                        "Novo item não foi gravado no espaço ${insert.index + 1}"
+                    val original = prev.inventorySlots.getOrNull(insert.index)
+                    val current = now.inventorySlots.getOrNull(insert.index)
+                    val perSlot = ItemRules.maxPerSlot(insert.itemId)
+                    require(original?.id == 0 && current?.id == insert.itemId &&
+                        current.count == if (perSlot == 1) 1 else insert.count) {
+                        "Novo item não foi gravado corretamente no espaço ${insert.index + 1}"
+                    }
+                    val previousTotal = prev.inventory[insert.itemId] ?: 0
+                    val newTotal = now.inventory[insert.itemId] ?: 0
+                    require(newTotal == previousTotal + insert.count) {
+                        "Quantidade inserida não corresponde aos espaços gravados"
                     }
                 }
                 for (replacement in plan.slotReplacements) {
@@ -721,7 +768,12 @@ object EkBackup {
                         }
                     }
                 }
-                for (item in plan.items) require(now.inventory[item.id] == item.count) { "Item não aplicado" }
+                for (item in plan.items) {
+                    val count = now.inventory[item.id] ?: 0
+                    val expected = if (ItemRules.isStackable(item.id)) item.count
+                        else (prev.inventory[item.id] ?: 0) + item.count
+                    require(count == expected) { "Item não aplicado corretamente no save ${prev.path}" }
+                }
             }
         }
         return result
