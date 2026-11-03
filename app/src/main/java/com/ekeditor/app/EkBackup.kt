@@ -54,7 +54,13 @@ object EkBackup {
     data class InventorySlot(val id: Int, val count: Int)
     data class ItemAdd(val id: Int, val count: Int = 1)
     /** Um stack por ação. Confere o ID em todos os saves antes de substituir. */
-    data class SlotEdit(val index: Int, val expectedId: Int, val expectedCount: Int, val quantity: Int)
+    data class SlotEdit(
+        val index: Int, val expectedId: Int, val expectedCount: Int, val quantity: Int,
+        /** True soma quantidade a cada save, preservando os valores individuais. */
+        val addQuantity: Boolean = false
+    )
+    /** Novo item somente no espaço vazio indicado, em TODOS os saves. */
+    data class SlotInsert(val index: Int, val itemId: Int, val count: Int)
     data class EditPlan(
         val targetPaths: Set<String>,
         val gold: Long? = null,
@@ -62,6 +68,7 @@ object EkBackup {
         val skillPoints: Int? = null,
         val items: List<ItemAdd> = emptyList(),
         val slotEdits: List<SlotEdit> = emptyList(),
+        val slotInserts: List<SlotInsert> = emptyList(),
         val traitDelta: Int? = null,
         val skillDelta: Int? = null,
         val resetTraits: Boolean = false,
@@ -74,7 +81,7 @@ object EkBackup {
         fun validate() {
             require(targetPaths.isNotEmpty()) { "Backup sem saves" }
             require(gold != null || traitPoints != null || skillPoints != null || items.isNotEmpty() ||
-                slotEdits.isNotEmpty() || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
+                slotEdits.isNotEmpty() || slotInserts.isNotEmpty() || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
                 companionSkillDelta != null || resetCompanionTraits || resetCompanionSkills) { "Nenhuma alteração selecionada" }
             require(gold == null || gold in 0..999_999_999) { "Ouro fora do intervalo" }
             require(traitPoints == null || traitPoints in 0..999) { "Atributos fora do intervalo" }
@@ -91,7 +98,14 @@ object EkBackup {
             }
             for (edit in slotEdits) {
                 require(edit.index >= 0 && edit.expectedId in 1..999_999 &&
-                    edit.expectedCount in 1..999 && edit.quantity in 0..999) { "Edição de item inválida" }
+                    edit.expectedCount in 1..999 && edit.quantity in (if (edit.addQuantity) 1..999 else 0..999)) {
+                    "Edição de item inválida"
+                }
+            }
+            for (insert in slotInserts) {
+                require(insert.index >= 0 && insert.itemId in 1..999_999 && insert.count in 1..999) {
+                    "Dados de inserção inválidos"
+                }
             }
         }
     }
@@ -306,7 +320,9 @@ object EkBackup {
         if (points.size != 6 || points.any { it < 0 }) return null
         val spent = points.sum()
         val bonus = anyTraitPattern.find(character)?.groupValues?.get(2)?.toIntOrNull() ?: 0
-        val byLevel = 4 + level - 1
+        // Companheiros não recebem os quatro pontos iniciais do herói.
+        // Exemplo real: Grissenda nível 14, 10 extras e 24 gastos => 14 + 10 - 24 = 0.
+        val byLevel = level
         return TraitBalance(level, byLevel, bonus, spent, byLevel + bonus - spent)
     }
 
@@ -484,7 +500,7 @@ object EkBackup {
         if (skillValue != null) player = replaceNumber(player, skillPattern, skillValue)
         var modified = text.replaceRange(playerRange.first, playerRange.last + 1, player)
         modified = rewriteCompanion(modified, plan)
-        if (plan.items.isNotEmpty() || plan.slotEdits.isNotEmpty()) {
+        if (plan.items.isNotEmpty() || plan.slotEdits.isNotEmpty() || plan.slotInserts.isNotEmpty()) {
             val pack = backpack(modified)
             val ids = numbers(pack.groupValues[2])
             val units = numbers(pack.groupValues[4])
@@ -505,12 +521,24 @@ object EkBackup {
                         candidates.single()
                     }
                 }
-                if (edit.quantity == 0) {
+                if (edit.addQuantity) {
+                    require(units[index].toLong() + edit.quantity <= 999L) {
+                        "Quantidade ultrapassaria 999 neste save; nenhuma alteração realizada"
+                    }
+                    units[index] += edit.quantity
+                } else if (edit.quantity == 0) {
                     ids[index] = 0
                     units[index] = 0
                 } else {
                     units[index] = edit.quantity
                 }
+            }
+            for (insert in plan.slotInserts) {
+                require(insert.index in ids.indices && ids[insert.index] == 0) {
+                    "Espaço ${insert.index + 1} não está vazio em todos os saves. Escolha outro espaço ou use a busca."
+                }
+                ids[insert.index] = insert.itemId
+                units[insert.index] = insert.count
             }
             for ((id, count) in plan.items) {
                 val slot = ids.indexOf(id).takeIf { it >= 0 } ?: ids.indexOf(0)
@@ -618,8 +646,18 @@ object EkBackup {
                             prevStacks.single().count
                         }
                     }
-                    require(newTotal == oldTotal - effectiveCount + edit.quantity) {
+                    val expectedTotal = if (edit.addQuantity) oldTotal + edit.quantity
+                        else oldTotal - effectiveCount + edit.quantity
+                    require(newTotal == expectedTotal) {
                         "Falha ao validar quantidade do item ID ${edit.expectedId}"
+                    }
+                }
+                for (insert in plan.slotInserts) {
+                    val beforeSlot = prev.inventorySlots.getOrNull(insert.index)
+                    val afterSlot = now.inventorySlots.getOrNull(insert.index)
+                    require(beforeSlot?.id == 0 && afterSlot?.id == insert.itemId &&
+                        afterSlot.count == insert.count) {
+                        "Novo item não foi gravado no espaço ${insert.index + 1}"
                     }
                 }
                 for (item in plan.items) require(now.inventory[item.id] == item.count) { "Item não aplicado" }
