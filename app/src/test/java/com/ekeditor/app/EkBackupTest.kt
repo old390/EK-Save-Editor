@@ -162,9 +162,9 @@ class EkBackupTest {
         val twice = EkBackup.apply(once, EkBackup.EditPlan(target, companionTraitDelta = 7, companionSkillDelta = 5))
         assertEquals(18, EkBackup.inspect(twice).single().companion?.traitPoints)
         assertEquals(12, EkBackup.inspect(twice).single().companion?.skillPoints)
-        // O fixture antigo não contém nível/gastos do companheiro:
-        // somente os bônus podem ser testados aqui. O zeramento é testado abaixo
-        // em um fixture completo para não simular saldos inexistentes.
+        // The old fixture has no companion level/spending data:
+        // only bonus points can be tested here. Reset logic is tested below
+        // using a complete fixture to avoid inventing missing available points.
         assertEquals(null, EkBackup.inspect(twice).single().companion?.freeTraitPoints)
         assertEquals(null, EkBackup.inspect(twice).single().companion?.freeSkillPoints)
     }
@@ -362,7 +362,7 @@ class EkBackupTest {
     }
 
 
-    /** Dez habilidades com custo total 39 para personagem de nível 16. */
+    /** Ten learned skills with a total cost of 39 for a level-16 character. */
     private fun clericWithLearnedSkills(): ByteArray {
         val original = String(Base64.getDecoder().decode(level16Save()), Charsets.UTF_8)
         val list = listOf(
@@ -527,7 +527,7 @@ class EkBackupTest {
     }
 
 
-    /** Regressão com dados equivalentes aos quatro saves reais: nível 14, 10 extras, 24 gastos. */
+    /** Regression test matching four real saves: level 14, 10 bonuses, 24 points spent. */
     @Test fun grissendaLevel14ResetThenPlusTenReallyGivesTenNotSeven() {
         val initial = ByteArrayOutputStream().also { out ->
             ZipOutputStream(out).use { zip ->
@@ -807,7 +807,7 @@ class EkBackupTest {
             assertEquals(0, info.inventorySlots[1].id)
             assertEquals(5013, info.inventorySlots[2].id)
         }
-        // Exclui a cópia remanescente seguinte (ordinal atualizado).
+        // Delete the next remaining copy (with updated occurrence index).
         val deletedAgain = EkBackup.apply(deletedSecond, EkBackup.EditPlan(paths,
             slotEdits = listOf(EkBackup.SlotEdit(2, 5013, 1, 0,
                 occurrence = 1))))
@@ -910,7 +910,7 @@ class EkBackupTest {
             slotEdits = listOf(EkBackup.SlotEdit(2, 5013, 1, 1,
                 addQuantity = true, occurrence = 1))))
         assertTrue(EkBackup.inspect(first).all { it.inventory[5013] == 3 })
-        // A segunda cópia existe em todos, mas sua posição é diferente.
+        // The second copy exists in all saves, but occupies a different slot.
         val second = EkBackup.apply(first, EkBackup.EditPlan(all,
             slotEdits = listOf(EkBackup.SlotEdit(2, 5013, 1, 0,
                 occurrence = 1))))
@@ -932,7 +932,7 @@ class EkBackupTest {
                 val vaults = (1..4).joinToString("\n") { number ->
                     val ids = when (number) {
                         1 -> firstVault
-                        2 -> (554..573).toList() // Segundo baú completamente cheio
+                        2 -> (554..573).toList() // Second vault is completely full
                         3 -> listOf(5070) + List(19) { 0 }
                         else -> List(20) { 0 }
                     }
