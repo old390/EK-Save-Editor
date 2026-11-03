@@ -23,6 +23,8 @@ class EkBackupTest {
             "\t\tcharacter: {\n" +
             "\t\t\t\tcharacterClass: warrior\n" +
             "\t\t\t\textraTraitPoints: 2\n" +
+            "\t\t\t\tspentPoints: [ 6, 0, 0, 0, 0, 0 ]\n" +
+            "\t\t\t\tcached_level: 1\n" +
             "\t\t\t\tbonusPoints: 3\n" +
             "\t\t}\n" +
             "\t}\n" +
@@ -126,7 +128,7 @@ class EkBackupTest {
         val second = EkBackup.apply(first, EkBackup.EditPlan(paths, traitDelta = 5, skillDelta = 2))
         assertTrue(EkBackup.inspect(second).all { it.traitPoints == 12 && it.skillPoints == 7 })
         val reset = EkBackup.apply(second, EkBackup.EditPlan(paths, resetTraits = true, resetSkills = true))
-        assertTrue(EkBackup.inspect(reset).all { it.traitPoints == 0 && it.skillPoints == 0 })
+        assertTrue(EkBackup.inspect(reset).all { it.traitPoints == 2 && it.freeTraitPoints == 0 && it.skillPoints == 0 })
     }
 
     private fun companionSave(gold: Int): ByteArray = Base64.getEncoder().encode(
@@ -244,4 +246,114 @@ class EkBackupTest {
         val changed = EkBackup.apply(original, EkBackup.EditPlan(all, resetCompanionSkills = true))
         assertTrue(EkBackup.inspect(changed).all { it.companion == null })
     }
+
+    /** Realistic data shape for a level-16 cleric: 35 earned, 10 bonus, 45 spent => 0 free. */
+    private fun level16Save(extra: Int = 10, spent: String = "10, 10, 3, 6, 6, 10"): ByteArray {
+        val content = (
+            "format: test\n" +
+            "version: 1.3.1219\n" +
+            "gamedata: {\n" +
+            "\tplayer: {\n" +
+            "\t\tname: Test Cleric\n" +
+            "\t\tgold: 25\n" +
+            "\t\tsheet: {\n" +
+            "\t\t\ttraits: {\n" +
+            "\t\t\t\tvalue: [ 4, 4, 2, 3, 3, 4 ]\n" +
+            "\t\t\t\textraTraitPoints: $extra\n" +
+            "\t\t\t\tspentPoints: [ $spent ]\n" +
+            "\t\t\t}\n" +
+            "\t\t\tstats: {\n" +
+            "\t\t\t\tcharacterClass: CLERIC\n" +
+            "\t\t\t\tcached_level: 16\n" +
+            "\t\t\t}\n" +
+            "\t\t\tskillSet: {\n" +
+            "\t\t\t\tbonusPoints: 8\n" +
+            "\t\t\t}\n" +
+            "\t\t}\n" +
+            "\t}\n" +
+            "\tbackpack: {\n" +
+            "\t\titemList: [ 0, 0, 0, 0 ]\n" +
+            "\t\tstackUnits: [ 0, 0, 0, 0 ]\n" +
+            "\t}\n" +
+            "}\n"
+        )
+        return Base64.getEncoder().encode(content.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun fourLevel16Saves(): ByteArray = ByteArrayOutputStream().also { out ->
+        ZipOutputStream(out).use { zip ->
+            for (filename in listOf("auto.sav", "auto2.sav", "game.sav", "game2.sav")) {
+                zip.putNextEntry(ZipEntry("saves/0/$filename"))
+                zip.write(level16Save())
+                zip.closeEntry()
+            }
+            zip.putNextEntry(ZipEntry("saves/global.sav"))
+            zip.write("Other archive content".toByteArray())
+            zip.closeEntry()
+        }
+    }.toByteArray()
+
+    @Test fun level16ReadsAvailablePointsNotTheExtraBonus() {
+        val all = EkBackup.inspect(fourLevel16Saves())
+        assertEquals(4, all.size)
+        assertTrue(all.all { it.characterLevel == 16 && it.spentTraitPoints == 45 })
+        assertTrue(all.all { it.traitPoints == 10 && it.freeTraitPoints == 0 })
+    }
+
+    @Test fun adding20And10IncreasesRealBalanceAndResetsAllFourSaves() {
+        val original = fourLevel16Saves()
+        val target = EkBackup.inspect(original).map { it.path }.toSet()
+        val edited = EkBackup.apply(original, EkBackup.EditPlan(target, traitDelta = 20))
+        assertTrue(EkBackup.inspect(edited).all { it.freeTraitPoints == 20 && it.traitPoints == 30 })
+        val twice = EkBackup.apply(edited, EkBackup.EditPlan(target, traitDelta = 10))
+        assertTrue(EkBackup.inspect(twice).all { it.freeTraitPoints == 30 && it.traitPoints == 40 })
+        val reset = EkBackup.apply(twice, EkBackup.EditPlan(target, resetTraits = true))
+        assertTrue(EkBackup.inspect(reset).all { it.freeTraitPoints == 0 && it.traitPoints == 10 })
+        assertTrue(EkBackup.inspect(reset).all { it.spentTraitPoints == 45 })
+        assertTrue(entries(original).getValue("saves/global.sav")
+            .contentEquals(entries(reset).getValue("saves/global.sav")))
+        assertTrue(EkBackup.inspect(original).all { it.freeTraitPoints == 0 })
+    }
+
+    @Test fun existingUnusedPointsAreRecognizedBeforeAdding20() {
+        val input = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry("saves/0/auto.sav"))
+                zip.write(level16Save(extra = 15))
+                zip.closeEntry()
+            }
+        }.toByteArray()
+        val before = EkBackup.inspect(input).single()
+        assertEquals(5, before.freeTraitPoints)
+        val changed = EkBackup.apply(input, EkBackup.EditPlan(setOf(before.path), traitDelta = 20))
+        val after = EkBackup.inspect(changed).single()
+        assertEquals(25, after.freeTraitPoints)
+        assertEquals(35, after.traitPoints)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun unsafeResetFailsWithoutChangingAlreadyAllocatedTraits() {
+        val input = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry("saves/0/game.sav"))
+                zip.write(level16Save(extra = 0, spent = "0, 0, 0, 0, 0, 0"))
+                zip.closeEntry()
+            }
+        }.toByteArray()
+        EkBackup.apply(input, EkBackup.EditPlan(setOf("saves/0/game.sav"), resetTraits = true))
+    }
+
+    @Test fun missingLevelAndSpentIsShownAsUnknownInsteadOfMisleadingBonus() {
+        val input = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry("saves/0/game.sav"))
+                zip.write(companionSave(100))
+                zip.closeEntry()
+            }
+        }.toByteArray()
+        val result = EkBackup.inspect(input).single()
+        assertEquals(null, result.freeTraitPoints)
+        assertEquals(2, result.traitPoints)
+    }
+
 }
