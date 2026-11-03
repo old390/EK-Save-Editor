@@ -84,6 +84,7 @@ object EkBackup {
         val slotEdits: List<SlotEdit> = emptyList(),
         val slotInserts: List<SlotInsert> = emptyList(),
         val slotReplacements: List<SlotReplace> = emptyList(),
+        val vaultChange: VaultStorage.Change? = null,
         val traitDelta: Int? = null,
         val skillDelta: Int? = null,
         val resetTraits: Boolean = false,
@@ -96,7 +97,7 @@ object EkBackup {
         fun validate() {
             require(targetPaths.isNotEmpty()) { "Backup sem saves" }
             require(gold != null || traitPoints != null || skillPoints != null || items.isNotEmpty() ||
-                slotEdits.isNotEmpty() || slotInserts.isNotEmpty() || slotReplacements.isNotEmpty() || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
+                slotEdits.isNotEmpty() || slotInserts.isNotEmpty() || slotReplacements.isNotEmpty() || vaultChange != null || traitDelta != null || skillDelta != null || resetTraits || resetSkills || companionTraitDelta != null ||
                 companionSkillDelta != null || resetCompanionTraits || resetCompanionSkills) { "Nenhuma alteração selecionada" }
             require(gold == null || gold in 0..999_999_999) { "Ouro fora do intervalo" }
             require(traitPoints == null || traitPoints in 0..999) { "Atributos fora do intervalo" }
@@ -131,6 +132,7 @@ object EkBackup {
                     "Inventários esperados não correspondem a todos os saves"
                 }
             }
+            vaultChange?.validate(targetPaths)
         }
     }
     /** Validação independente da interface, permitindo testes de valores vazios e inválidos. */
@@ -444,6 +446,12 @@ object EkBackup {
         )
     }.also { require(it.isNotEmpty()) { "Nenhum save reconhecido no EK.bak" } }
 
+    /** Identifica os quatro baús em cada save sem confundi-los com backpack. */
+    fun inspectVaults(data: ByteArray): Map<String, List<VaultStorage.VaultInfo>> =
+        archive(data).filter { savePath.matches(it.entry.name) }.associate { source ->
+            source.entry.name to VaultStorage.read(plain(source.contents))
+        }
+
     private fun replaceNumber(text: String, pattern: Regex, number: Number): String {
         val found = pattern.find(text) ?: error("Campo de pontos não encontrado")
         return text.replaceRange(found.groups[2]!!.range, number.toString())
@@ -652,6 +660,9 @@ object EkBackup {
                 parts[3] + units.joinToString(", ", " ", " ") + parts[5]
             modified = modified.replaceRange(pack.range.first, pack.range.last + 1, patched)
         }
+        if (plan.vaultChange != null) {
+            modified = VaultStorage.modify(modified, plan.vaultChange, path)
+        }
         return modified
     }
     fun apply(data: ByteArray, plan: EditPlan): ByteArray {
@@ -679,6 +690,17 @@ object EkBackup {
         }
         require(modifiedNames == plan.targetPaths) { "Faltou modificar um save" }
         val result = output.toByteArray()
+        if (plan.vaultChange != null) {
+            val oldByName = before.associateBy { it.entry.name }
+            val updatedByName = archive(result).associateBy { it.entry.name }
+            for (path in plan.targetPaths) {
+                VaultStorage.verify(
+                    plain(oldByName.getValue(path).contents),
+                    plain(updatedByName.getValue(path).contents),
+                    plan.vaultChange, path
+                )
+            }
+        }
         val after = archive(result)
         require(before.map { it.entry.name } == after.map { it.entry.name }) { "Arquivos ZIP diferentes" }
         for ((a,b) in before.zip(after)) if (a.entry.name !in modifiedNames) {
