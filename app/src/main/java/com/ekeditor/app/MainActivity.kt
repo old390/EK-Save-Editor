@@ -48,7 +48,7 @@ class MainActivity : Activity() {
     private var originalBytes: ByteArray? = null
     private var editedBytes: ByteArray? = null
     private var pendingExport: ByteArray? = null
-    /** Todos os personagens são mantidos juntos; só os saves do selecionado são editáveis. */
+    /** All characters remain in the same backup; only the selected character's saves can be edited. */
     private var allSaves = emptyList<EkBackup.SaveInfo>()
     private var selectedCharacterSlot = 0
     private lateinit var characterButton: Button
@@ -109,16 +109,16 @@ class MainActivity : Activity() {
                 appliedChanges = savedInstanceState.getInt("applied_changes")
                 selectedItem = catalog.items.firstOrNull { it.id == savedInstanceState.getInt("item_id", -1) }
                 selectedPotion = catalog.items.firstOrNull { it.id == savedInstanceState.getInt("potion_id", -1) }
-                itemSelectionLabel.text = selectedItem?.name ?: "Nenhum item selecionado"
-                potionSelectionLabel.text = selectedPotion?.name ?: "Nenhuma poção selecionada"
-                lastChange.text = "Sessão restaurada com $appliedChanges alteração(ões)."
+                itemSelectionLabel.text = selectedItem?.name ?: "No item selected"
+                potionSelectionLabel.text = selectedPotion?.name ?: "No potion selected"
+                lastChange.text = "Session restored with $appliedChanges change(s)."
                 updateEnabled()
                 refreshPreview(true)
-                setStatus("✓ Edições recuperadas. Exporte quando terminar.", true)
+                setStatus("✓ Edits restored. Export the backup when you're done.", true)
             } catch (_: Exception) {
-                setStatus("Selecione EK.bak para começar.", false)
+                setStatus("Select EK.bak to get started.", false)
             }
-        } else setStatus("Selecione EK.bak para começar.", false)
+        } else setStatus("Select EK.bak to get started.", false)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -175,9 +175,9 @@ class MainActivity : Activity() {
             setOnClickListener { callback() }
         }
     private fun editAction(label: String, callback: () -> Unit): Button = action(label, true, {
-        // Captura valores inválidos antes de encerrar a Activity: o usuário recebe um aviso.
+        // Catch invalid input and show the user an error instead of crashing.
         try { callback() } catch (e: Exception) {
-            notifyError(e.message ?: "Verifique os valores antes de aplicar.")
+            notifyError(e.message ?: "Check the values before applying.")
         }
     }).also {
         it.isEnabled = false; editButtons += it
@@ -194,7 +194,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.7.0", 16f, GOLD, true).apply {
+        body.addView(text("Save editor by old390 • v0.7.0", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -202,71 +202,71 @@ class MainActivity : Activity() {
             setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/old390/EK-Save-Editor"))) }
         }, margin(0, 12))
 
-        val files = section("📁  Encontrar save", "Crie um backup no jogo e importe o EK.bak pelo gerenciador de arquivos.")
+        val files = section("📁  Open backup", "Create an in-game backup, then import EK.bak with the Android file picker.")
         status = text("", 13f, GOLD, true)
-        sourceDetails = text("Nenhum backup importado", 13f, MUTED)
+        sourceDetails = text("No backup imported", 13f, MUTED)
         files.addView(status, margin(2, 7))
         files.addView(sourceDetails, margin(5, 8))
-        files.addView(action("📂  Selecionar EK.bak") { importBackup() }, margin(2, 5))
-        files.addView(action("🔎  Conferir valores de todos os saves") { showAllSaveAudit() }, margin(1, 6))
+        files.addView(action("📂  Select EK.bak") { importBackup() }, margin(2, 5))
+        files.addView(action("🔎  Review all saves for this character") { showAllSaveAudit() }, margin(1, 6))
         body.addView(files, margin(0, 12))
 
-        val characters = section("👤  Escolher personagem",
-            "O backup pode conter vários personagens. Selecione um para ver seu inventário, " +
-                "companheiro, atributos, habilidades e baús. Todas as edições afetarão somente os saves dele.")
-        characterButton = action("Selecionar personagem") { showCharacterMenu() }.apply {
+        val characters = section("👤  Choose character",
+            "The backup may contain multiple characters. Choose one to view their inventory, " +
+                "companion, attributes, skills, and vaults. Changes only affect that character's saves.")
+        characterButton = action("Select character") { showCharacterMenu() }.apply {
             isEnabled = false
         }
-        characterSummary = text("Importe EK.bak para encontrar personagens.", 13f, MUTED)
+        characterSummary = text("Import EK.bak to find your characters.", 13f, MUTED)
         characters.addView(characterButton, margin(2, 5))
         characters.addView(characterSummary, margin(6, 3))
         body.addView(characters, margin(0, 12))
 
-        val inventory = section("🎒  Inventário, itens e poções", "Grade visual dos espaços reais de um save de referência. As edições continuam sendo aplicadas a todos os saves.")
-        itemsCurrent = text("Nenhum inventário carregado", 13f, TEXT)
+        val inventory = section("🎒  Inventory, Items & Potions", "A visual grid of actual inventory slots from a reference save. Edits are applied to all saves for the selected character.")
+        itemsCurrent = text("No inventory loaded", 13f, TEXT)
         inventory.addView(itemsCurrent, margin(0, 7))
         inventoryGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         inventory.addView(inventoryGrid, margin(1, 5))
-        inventory.addView(text("Toque em um item para somar, alterar a quantidade, excluir ou substituí-lo. Em um espaço vazio, escolha um item para inserir. Quando os saves tiverem itens diferentes ou o inventário estiver cheio, você poderá escolher uma substituição explícita antes de aplicar. Nomes em vermelho: itens não empilháveis (1 por espaço).", 11f, MUTED), margin(4, 12))
-        inventory.addView(text("Adicionar item do catálogo", 13f, GOLD, true))
-        itemSelectionLabel = text("Nenhum item selecionado", 13f, TEXT)
+        inventory.addView(text("Tap an item to add more, change its quantity, delete it, or replace it. Tap an empty slot to insert an item. If another save has a different item or a full inventory, you can review and confirm a replacement. Red item names indicate non-stackable items (one per slot).", 11f, MUTED), margin(4, 12))
+        inventory.addView(text("Add an item from the catalog", 13f, GOLD, true))
+        itemSelectionLabel = text("No item selected", 13f, TEXT)
         inventory.addView(itemSelectionLabel, margin(7, 3))
-        inventory.addView(action("🔎  Procurar item por nome ou ID") { chooseCatalog(false) }, margin(3, 5))
-        itemAmount = number("Quantidade de itens", "1")
+        inventory.addView(action("🔎  Search items by name or ID") { chooseCatalog(false) }, margin(3, 5))
+        itemAmount = number("Item quantity", "1")
         inventory.addView(itemAmount)
-        inventory.addView(editAction("✓  Aplicar item em todos os saves") {
-            val item = selectedItem ?: return@editAction notifyError("Escolha um item no catálogo")
-            val amount = numberValue(itemAmount, "Quantidade", 999, 1).toInt()
+        inventory.addView(editAction("✓  Add item to character's saves") {
+            val item = selectedItem ?: return@editAction notifyError("Choose an item from the catalog")
+            val amount = numberValue(itemAmount, "Quantity", 999, 1).toInt()
             addOrChooseReplacement(item, amount)
         }, margin(5, 10))
-        inventory.addView(text("Adicionar poção ou consumível", 13f, GOLD, true))
-        potionSelectionLabel = text("Nenhuma poção selecionada", 13f, TEXT)
+        inventory.addView(text("Add a potion or consumable", 13f, GOLD, true))
+        potionSelectionLabel = text("No potion selected", 13f, TEXT)
         inventory.addView(potionSelectionLabel, margin(7, 3))
-        inventory.addView(action("🧪  Escolher poção na lista") { chooseCatalog(true) }, margin(3, 5))
-        potionAmount = number("Quantidade de poções", "1")
+        inventory.addView(action("🧪  Choose a potion") { chooseCatalog(true) }, margin(3, 5))
+        potionAmount = number("Potion quantity", "1")
         inventory.addView(potionAmount)
-        inventory.addView(editAction("✓  Aplicar poção em todos os saves") {
-            val item = selectedPotion ?: return@editAction notifyError("Escolha uma poção na lista")
-            val amount = numberValue(potionAmount, "Quantidade", 999, 1).toInt()
+        inventory.addView(editAction("✓  Add potion to character's saves") {
+            val item = selectedPotion ?: return@editAction notifyError("Choose a potion from the list")
+            val amount = numberValue(potionAmount, "Quantity", 999, 1).toInt()
             addOrChooseReplacement(item, amount)
         }, margin(5, 9))
-        inventory.addView(text("⚠ Quando um save estiver cheio, a inserção simples será bloqueada. Você poderá escolher uma posição e confirmar quais itens serão substituídos em cada save. Nada será apagado automaticamente. Preserve o EK.bak original.", 12f, MUTED))
+        inventory.addView(text("⚠ If any save has a full inventory, adding a new item may require a confirmed replacement. You'll see exactly what would be replaced in each save. Nothing is deleted automatically. Keep your original EK.bak.", 12f, MUTED))
         body.addView(inventory, margin(0, 12))
 
-        val vaultSection = section("🏛️  Baús da Prefeitura",
-            "Escolha entre os quatro baús. Cada um tem 20 espaços próprios. " +
-                "A grade mostra um save de referência e aplica alterações verificadas em todos. " +
-                "Toque nos itens para adicionar cópias, definir quantidade, excluir ou substituir.")
-        vaultSelector = action("🗃️  Escolher baú") { showVaultMenu() }
-        vaultSummary = text("Importe EK.bak para consultar os baús.", 13f, TEXT)
+        val vaultSection = section("🏛️  Town Hall Vaults",
+            "Choose from four vaults, each with 20 separate slots. " +
+                "The grid shows a reference save and verifies changes across all saves for this character. " +
+                "Tap items to add copies, set quantities, delete, or replace them.")
+        vaultSelector = action("🗃️  Choose vault") { showVaultMenu() }
+        vaultSummary = text("Import EK.bak to view vaults.", 13f, TEXT)
         vaultGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        vaultUnlockButton = editAction("🔓  Desbloquear baú selecionado") {
-            AlertDialog.Builder(this).setTitle("Desbloquear baú $selectedVault?")
-                .setMessage("Ativa o baú nos quatro saves sem descontar ouro. " +
-                    "É uma edição do backup, não uma compra no jogo. Prosseguir?")
-                .setNegativeButton("Cancelar", null)
+        vaultUnlockButton = editAction("🔓  Unlock selected vault") {
+            AlertDialog.Builder(this).setTitle("Unlock vault $selectedVault?")
+                .setMessage("Unlocks this vault in the selected character's saves without spending gold. " +
+                    "This edits the backup; it is not an in-game purchase. Continue?")
+                .setNegativeButton("Cancel", null)
                 .setPositiveButton("Desbloquear") { _, _ ->
-                    applyVaultChange("Baú $selectedVault desbloqueado",
+                    applyVaultChange("Vault $selectedVault unlocked",
                         VaultStorage.Change(selectedVault, VaultStorage.Action.UNLOCK))
                 }.show()
         }
@@ -275,103 +275,103 @@ class MainActivity : Activity() {
         vaultSection.addView(vaultGrid, margin(3, 4))
         vaultUnlockButton.visibility = View.GONE
         vaultSection.addView(vaultUnlockButton, margin(7, 4))
-        vaultSection.addView(text("⚠ Os conteúdos podem variar entre saves. " +
-            "Substituições exibem o item de cada save antes de confirmar. " +
-            "Itens em vermelho ocupam apenas uma unidade por espaço.", 11f, MUTED), margin(5, 5))
+        vaultSection.addView(text("⚠ Vault contents may differ between saves. " +
+            "Before replacing anything, you'll see the item in each save. " +
+            "Red items are limited to one per slot.", 11f, MUTED), margin(5, 5))
         body.addView(vaultSection, margin(0, 12))
 
-        val gold = section("🪙  Ouro", "Defina a quantidade de ouro e toque em Aplicar. A mudança aparece imediatamente.")
-        goldCurrent = text("Ouro atual: —", 14f, TEXT, true)
-        goldInput = number("Novo valor de ouro")
+        val gold = section("🪙  Gold", "Enter the gold amount and tap Apply. The change appears immediately.")
+        goldCurrent = text("Current gold: —", 14f, TEXT, true)
+        goldInput = number("New gold amount")
         gold.addView(goldCurrent)
         gold.addView(goldInput, margin(8, 5))
-        gold.addView(editAction("✓  Aplicar ouro a todos") {
-            val value = numberValue(goldInput, "Ouro", 999_999_999)
-            applyChange("Ouro") { paths -> EkBackup.EditPlan(paths, gold = value) }
+        gold.addView(editAction("✓  Apply gold to this character") {
+            val value = numberValue(goldInput, "Gold", 999_999_999)
+            applyChange("Gold") { paths -> EkBackup.EditPlan(paths, gold = value) }
         }, margin(4, 0))
         body.addView(gold, margin(0, 12))
 
-        val attributes = section("💪  Atributos", "Saldo real = pontos recebidos por nível + bônus extras − pontos já gastos. Cada toque em Somar acrescenta o número digitado em todos os saves.")
-        traitCurrent = text("Pontos livres atuais: —", 14f, TEXT, true)
-        traitDeltaInput = number("Pontos para adicionar", "10")
+        val attributes = section("💪  Attributes", "Available points = points earned by leveling + bonus points − points already spent. Each Add action increases the value across this character's saves.")
+        traitCurrent = text("Available points: —", 14f, TEXT, true)
+        traitDeltaInput = number("Points to add", "10")
         attributes.addView(traitCurrent)
         attributes.addView(traitDeltaInput, margin(8, 5))
-        attributes.addView(editAction("+  Somar pontos de atributos") {
-            val amount = numberValue(traitDeltaInput, "Atributos", 999, 1).toInt()
+        attributes.addView(editAction("+  Add attribute points") {
+            val amount = numberValue(traitDeltaInput, "Attributes", 999, 1).toInt()
             applyChange("+$amount atributos") { paths -> EkBackup.EditPlan(paths, traitDelta = amount) }
         }, margin(4, 6))
-        attributes.addView(editAction("↺  Zerar pontos livres de atributos") {
-            confirmReset("Zerar os pontos livres de atributos do personagem em todos os saves?") {
-                applyChange("Atributos zerados") { paths -> EkBackup.EditPlan(paths, resetTraits = true) }
+        attributes.addView(editAction("↺  Reset unspent attribute points") {
+            confirmReset("Reset this character's unspent attribute points in every save?") {
+                applyChange("Attribute points reset") { paths -> EkBackup.EditPlan(paths, resetTraits = true) }
             }
         })
         body.addView(attributes, margin(0, 12))
 
-        val skills = section("✨  Habilidades", "Saldo real = pontos recebidos por nível + bônus − custo de cada habilidade aprendida. Somar acrescenta ao saldo real sem apagar habilidades.")
-        skillCurrent = text("Habilidades livres atuais: —", 14f, TEXT, true)
-        skillDeltaInput = number("Pontos para adicionar", "10")
+        val skills = section("✨  Skills", "Available points = points earned by leveling + bonus points − costs of learned skills. Adding points does not remove learned skills.")
+        skillCurrent = text("Available skill points: —", 14f, TEXT, true)
+        skillDeltaInput = number("Points to add", "10")
         skills.addView(skillCurrent)
         skills.addView(skillDeltaInput, margin(8, 5))
-        skills.addView(editAction("+  Somar pontos de habilidades") {
-            val amount = numberValue(skillDeltaInput, "Habilidades", 999, 1).toInt()
+        skills.addView(editAction("+  Add skill points") {
+            val amount = numberValue(skillDeltaInput, "Skills", 999, 1).toInt()
             applyChange("+$amount habilidades") { paths -> EkBackup.EditPlan(paths, skillDelta = amount) }
         }, margin(4, 6))
-        skills.addView(editAction("↺  Zerar pontos livres de habilidades") {
-            confirmReset("Zerar os pontos livres de habilidades do personagem em todos os saves?") {
-                applyChange("Habilidades zeradas") { paths -> EkBackup.EditPlan(paths, resetSkills = true) }
+        skills.addView(editAction("↺  Reset unspent skill points") {
+            confirmReset("Reset this character's unspent skill points in every save?") {
+                applyChange("Skill points reset") { paths -> EkBackup.EditPlan(paths, resetSkills = true) }
             }
         })
         body.addView(skills, margin(0, 12))
 
-        companionCard = section("🛡️  Companheiro ativo", "Atributos e habilidades livres reais do companheiro ativo. São mantidas as habilidades aprendidas e os atributos já gastos.")
-        companionTitle = text("Companheiro", 14f, GOLD, true)
-        companionTraitCurrent = text("Atributos livres reais: —", 14f, TEXT)
-        companionSkillCurrent = text("Habilidades livres reais: —", 14f, TEXT)
-        companionTraitInput = number("Atributos para adicionar", "10")
-        companionSkillInput = number("Habilidades para adicionar", "10")
+        companionCard = section("🛡️  Active companion", "Available attribute and skill points for the active companion. Learned skills and allocated attributes are preserved.")
+        companionTitle = text("Companion", 14f, GOLD, true)
+        companionTraitCurrent = text("Available attribute points: —", 14f, TEXT)
+        companionSkillCurrent = text("Available skill points: —", 14f, TEXT)
+        companionTraitInput = number("Attribute points to add", "10")
+        companionSkillInput = number("Skill points to add", "10")
         companionCard.addView(companionTitle)
         companionCard.addView(companionTraitCurrent, margin(7, 5))
         companionCard.addView(companionTraitInput)
-        companionCard.addView(editAction("+  Somar atributos do companheiro") {
-            val n = numberValue(companionTraitInput, "Atributos do companheiro", 999, 1).toInt()
+        companionCard.addView(editAction("+  Add companion attribute points") {
+            val n = numberValue(companionTraitInput, "Attributes do companheiro", 999, 1).toInt()
             applyChange("+$n atributos do companheiro") { paths -> EkBackup.EditPlan(paths, companionTraitDelta = n) }
         }, margin(4, 5))
-        companionCard.addView(editAction("↺  Zerar atributos livres do companheiro") {
-            confirmReset("Zerar os pontos livres de atributos do companheiro ativo?") {
-                applyChange("Atributos do companheiro zerados") { paths -> EkBackup.EditPlan(paths, resetCompanionTraits = true) }
+        companionCard.addView(editAction("↺  Reset companion attribute points") {
+            confirmReset("Reset the active companion's unspent attribute points?") {
+                applyChange("Companion attribute points reset") { paths -> EkBackup.EditPlan(paths, resetCompanionTraits = true) }
             }
         })
         companionCard.addView(companionSkillCurrent, margin(10, 5))
         companionCard.addView(companionSkillInput)
-        companionCard.addView(editAction("+  Somar habilidades do companheiro") {
-            val n = numberValue(companionSkillInput, "Habilidades do companheiro", 999, 1).toInt()
+        companionCard.addView(editAction("+  Add companion skill points") {
+            val n = numberValue(companionSkillInput, "Skills do companheiro", 999, 1).toInt()
             applyChange("+$n habilidades do companheiro") { paths -> EkBackup.EditPlan(paths, companionSkillDelta = n) }
         }, margin(4, 6))
-        companionCard.addView(editAction("↺  Zerar habilidades livres do companheiro") {
-            confirmReset("Zerar os pontos livres de habilidades do companheiro ativo em todos os saves?") {
-                applyChange("Habilidades do companheiro zeradas") { paths -> EkBackup.EditPlan(paths, resetCompanionSkills = true) }
+        companionCard.addView(editAction("↺  Reset companion skill points") {
+            confirmReset("Reset the active companion's unspent skill points in every save?") {
+                applyChange("Companion skill points reset") { paths -> EkBackup.EditPlan(paths, resetCompanionSkills = true) }
             }
         })
         companionCard.visibility = View.GONE
         body.addView(companionCard, margin(0, 4))
-        body.addView(text("Quando houver um companheiro ativo no backup, os campos de atributos e habilidades dele aparecerão aqui.", 12f, MUTED), margin(4, 12))
+        body.addView(text("If the selected character has an active companion, their attribute and skill points will appear here.", 12f, MUTED), margin(4, 12))
 
-        val export = section("🛡️  Exportar e restaurar", "As mudanças ficam no aplicativo até exportar o EK.bak e restaurá-lo pelo jogo. Confira todos os saves antes de exportar.")
-        lastChange = text("Nenhuma alteração aplicada nesta sessão.", 13f, MUTED)
+        val export = section("🛡️  Export & Restore", "Changes remain in the editor until you export EK.bak and restore it in the game. Review your changes before exporting.")
+        lastChange = text("No changes made in this session.", 13f, MUTED)
         export.addView(lastChange, margin(2, 9))
-        exportButton = action("💾  Exportar EK.bak modificado", true) {
+        exportButton = action("💾  Export edited EK.bak", true) {
             val bytes = editedBytes ?: return@action notifyError("Importe o EK.bak primeiro")
-            if (appliedChanges == 0) return@action notifyError("Aplique pelo menos uma alteração")
+            if (appliedChanges == 0) return@action notifyError("Make at least one change before exporting")
             writeToPicker(bytes, "EK.bak")
         }
         export.addView(exportButton, margin(5, 7))
-        originalButton = action("🗂️  Salvar cópia do original") {
-            writeToPicker(originalBytes ?: return@action notifyError("Carregue um backup"), "EK_original_preservado.bak")
+        originalButton = action("🗂️  Save a copy of the original") {
+            writeToPicker(originalBytes ?: return@action notifyError("Load a backup first"), "EK_original_preservado.bak")
         }
         export.addView(originalButton, margin(2, 5))
-        export.addView(text("Depois de exportar, mova EK.bak para:\n$GAME_PATH\nAbra o jogo e use RESTAURAR BACKUP. Preserve o arquivo original fora da pasta do jogo.", 12f, MUTED), margin(7, 0))
+        export.addView(text("After exporting, move EK.bak to:\n$GAME_PATH\nOpen the game and select RESTORE BACKUP. Keep a copy of the original file outside the game's folder.", 12f, MUTED), margin(7, 0))
         body.addView(export, margin(0, 15))
-        body.addView(text("Aplicativo independente; não afiliado aos criadores do jogo. Catálogo de IDs: comunidade Steam (2021).", 11f, MUTED).apply { gravity = Gravity.CENTER })
+        body.addView(text("Independent app; not affiliated with the game's developers. Item IDs: Steam community catalog (2021).", 11f, MUTED).apply { gravity = Gravity.CENTER })
         updateEnabled()
     }
     private fun selectedCharacterInfo(): EkBackup.CharacterInfo? =
@@ -380,15 +380,15 @@ class MainActivity : Activity() {
     private fun updateCharacterSummary() {
         val characters = EkBackup.characters(allSaves)
         val selected = selectedCharacterInfo()
-        characterButton.text = if (selected == null) "👤  Selecionar personagem"
-            else "👤  ${selected.name} · escolher outro"
+        characterButton.text = if (selected == null) "👤  Select character"
+            else "👤  ${selected.name} · switch character"
         characterSummary.text = if (selected == null) {
-            "Importe EK.bak para encontrar personagens."
+            "Import EK.bak to find your characters."
         } else {
             "${selected.name} · ${selected.characterClass} · " +
-                "Nível ${selected.level ?: "?"} · ${selected.savePaths.size} save(s)\n" +
-                "${characters.size} personagem(ns) encontrado(s). " +
-                "As alterações atingirão exclusivamente os arquivos da pasta saves/${selected.slot}/."
+                "Level ${selected.level ?: "?"} · ${selected.savePaths.size} save(s)\n" +
+                "${characters.size} character(s) found. " +
+                "Changes will only affect files in saves/${selected.slot}/."
         }
     }
 
@@ -396,11 +396,11 @@ class MainActivity : Activity() {
         val available = EkBackup.characters(allSaves)
         if (available.isEmpty()) return notifyError("Importe EK.bak primeiro")
         val labels = available.map { character ->
-            "${character.name} · ${character.characterClass} · Nível ${character.level ?: "?"} " +
+            "${character.name} · ${character.characterClass} · Level ${character.level ?: "?"} " +
                 "(${character.savePaths.size} saves)"
         }.toTypedArray()
         val current = available.indexOfFirst { it.slot == selectedCharacterSlot }
-        AlertDialog.Builder(this).setTitle("Selecionar personagem")
+        AlertDialog.Builder(this).setTitle("Select character")
             .setSingleChoiceItems(labels, current) { dialog, which ->
                 val chosen = available[which]
                 selectedCharacterSlot = chosen.slot
@@ -408,8 +408,8 @@ class MainActivity : Activity() {
                 selectedVault = 1
                 dialog.dismiss()
                 refreshPreview(true)
-                setStatus("✓ ${chosen.name} selecionado. Apenas seus ${saves.size} saves serão editados.", true)
-            }.setNegativeButton("Cancelar", null).show()
+                setStatus("✓ ${chosen.name} selected. Only their ${saves.size} saves will be edited.", true)
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun showAllSaveAudit() {
@@ -426,24 +426,24 @@ class MainActivity : Activity() {
                 val shortPath = info.path.substringAfter("saves/")
                 fun format(old: Any?, now: Any) = if (old == null || old == now) "$now" else "$old → $now"
                 "• $shortPath\n" +
-                    "Ouro: ${format(previous?.gold, info.gold)}\n" +
-                    "Atributos livres reais: ${format(previous?.freeTraitPoints, info.freeTraitPoints ?: "indisponível")}\n" +
-                    "Bônus extras de atributos: ${format(previous?.traitPoints, info.traitPoints)}\n" +
-                    "Atributos gastos: ${info.spentTraitPoints ?: "?"}\n" +
-                    "Habilidades livres reais: ${format(previous?.freeSkillPoints, info.freeSkillPoints ?: "indisponível")}\n" +
-                    "Bônus de habilidades: ${format(previous?.skillPoints, info.skillPoints)}\n" +
-                    "Habilidades gastas: ${info.spentSkillPoints ?: "?"}\n" +
-                    "Companheiro: ${info.companion?.name ?: "nenhum"}" +
+                    "Gold: ${format(previous?.gold, info.gold)}\n" +
+                    "Available attribute points: ${format(previous?.freeTraitPoints, info.freeTraitPoints ?: "indisponível")}\n" +
+                    "Extra attribute points: ${format(previous?.traitPoints, info.traitPoints)}\n" +
+                    "Spent attribute points: ${info.spentTraitPoints ?: "?"}\n" +
+                    "Available skill points: ${format(previous?.freeSkillPoints, info.freeSkillPoints ?: "indisponível")}\n" +
+                    "Bonus skill points: ${format(previous?.skillPoints, info.skillPoints)}\n" +
+                    "Spent skill points: ${info.spentSkillPoints ?: "?"}\n" +
+                    "Companion: ${info.companion?.name ?: "nenhum"}" +
                     (info.companion?.let { c ->
-                        "\n  Atributos livres: ${c.freeTraitPoints ?: "indisponível"}" +
-                        " | Habilidades livres: ${c.freeSkillPoints ?: "indisponível"}"
+                        "\n  Available attributes: ${c.freeTraitPoints ?: "indisponível"}" +
+                        " | Available skills: ${c.freeSkillPoints ?: "indisponível"}"
                     } ?: "")
             }
             AlertDialog.Builder(this)
-                .setTitle("Conferência de ${selectedCharacterInfo()?.name ?: "personagem"}: ${updated.size} saves")
-                .setMessage("Estes são os valores gravados no backup em memória. Ainda será necessário exportar e restaurar pelo jogo.\n\n$details")
-                .setPositiveButton("Entendi", null).show()
-        } catch (e: Exception) { notifyError("Conferência falhou: ${e.message}") }
+                .setTitle("Review for ${selectedCharacterInfo()?.name ?: "personagem"}: ${updated.size} saves")
+                .setMessage("These values are stored in the editor's in-memory backup. Export the file and restore it in the game to apply them.\n\n$details")
+                .setPositiveButton("OK", null).show()
+        } catch (e: Exception) { notifyError("Review failed: ${e.message}") }
     }
 
     private fun vaultData(): Map<String, List<VaultStorage.VaultInfo>> {
@@ -470,17 +470,17 @@ class MainActivity : Activity() {
             }
             "Baú $number · $state"
         }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Escolher baú da Prefeitura")
+        AlertDialog.Builder(this).setTitle("Choose vault da Prefeitura")
             .setSingleChoiceItems(labels, selectedVault - 1) { dialog, choice ->
                 selectedVault = choice + 1
                 dialog.dismiss()
                 refreshVaultPreview()
-            }.setNegativeButton("Cancelar", null).show()
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun refreshVaultPreview() {
         vaultGrid.removeAllViews()
-        vaultSelector.text = "🗃️  Escolher baú · Baú $selectedVault"
+        vaultSelector.text = "🗃️  Choose vault · Baú $selectedVault"
         val bySave = try { selectedVaultData() } catch (e: Exception) {
             vaultSummary.text = "Baú indisponível: ${e.message}"
             vaultUnlockButton.visibility = View.GONE
@@ -545,7 +545,7 @@ class MainActivity : Activity() {
                         val vaultNumber = selectedVault
                         if (occupied) showVaultSlotActions(vaultNumber, index, slot, label)
                         else chooseCatalog(false) { item ->
-                            askVaultItemQuantity("Adicionar ${item.name}", item) { count ->
+                            askVaultItemQuantity("Add ${item.name}", item) { count ->
                                 addIntoVaultSpace(vaultNumber, index, item, count)
                             }
                         }
@@ -568,25 +568,25 @@ class MainActivity : Activity() {
         heading: String, item: ItemCatalog.Item,
         limitToOne: Boolean = false, onReady: (Int) -> Unit
     ) {
-        val field = number("Quantidade", "1")
+        val field = number("Quantity", "1")
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(7), dp(16), dp(7))
             addView(text(if (!ItemRules.isStackable(item.id))
                 "Item não empilhável: cada unidade ocupa um espaço próprio."
-            else "Quantidade máxima por pilha: 999.", 12f,
+            else "Quantity máxima por pilha: 999.", 12f,
                 if (!ItemRules.isStackable(item.id)) NON_STACKABLE_RED else MUTED))
             addView(field, margin(4, 5))
         }
         AlertDialog.Builder(this).setTitle(heading)
             .setView(wrapper)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Continuar") { _, _ ->
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Continue") { _, _ ->
                 try {
                     val max = if (limitToOne) ItemRules.maxPerSlot(item.id) else 999
-                    val amount = numberValue(field, "Quantidade do baú", max.toLong(), 1).toInt()
+                    val amount = numberValue(field, "Quantity do baú", max.toLong(), 1).toInt()
                     onReady(amount)
-                } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
+                } catch (e: Exception) { notifyError(e.message ?: "Quantity inválida") }
             }.show()
     }
 
@@ -626,7 +626,7 @@ class MainActivity : Activity() {
             .setMessage("Posição ${index + 1} receberá ${item.name} ×$amount em todos os saves.\n\n" +
                 "Itens que serão substituídos:\n$review\n\n" +
                 "Apenas esta posição será modificada em cada save.")
-            .setNegativeButton("Cancelar", null)
+            .setNegativeButton("Cancel", null)
             .setPositiveButton("Confirmar troca") { _, _ ->
                 applyVaultChange("Baú $vault: troca na posição ${index + 1}",
                     VaultStorage.Change(vault, VaultStorage.Action.REPLACE,
@@ -653,8 +653,8 @@ class MainActivity : Activity() {
             layout.addView(action(name) { dialog.dismiss(); handler() }, margin(2, 4))
         }
         val item = ItemCatalog.Item(slot.id, label, "")
-        option(if (stackable) "＋  Adicionar unidades" else "＋  Duplicar cópia") {
-            askVaultItemQuantity("Adicionar $label", item) { n ->
+        option(if (stackable) "＋  Add unidades" else "＋  Duplicar cópia") {
+            askVaultItemQuantity("Add $label", item) { n ->
                 applyVaultChange("Baú $vault: +$n $label",
                     VaultStorage.Change(vault, VaultStorage.Action.ADD,
                         index = index, itemId = slot.id, amount = n, occurrence = occurrence))
@@ -667,13 +667,13 @@ class MainActivity : Activity() {
                         index = index, itemId = slot.id, amount = n, occurrence = occurrence))
             }
         }
-        option("🗑  Excluir cópia / pilha") {
+        option("🗑  Delete cópia / pilha") {
             AlertDialog.Builder(this)
-                .setTitle("Excluir $label do Baú $vault?")
+                .setTitle("Delete $label do Baú $vault?")
                 .setMessage("Exclui a ocorrência selecionada do item em cada save onde existir. " +
                     "As outras cópias e os outros baús serão preservados.")
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton("Excluir") { _, _ ->
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete") { _, _ ->
                     applyVaultChange("Baú $vault: excluído $label",
                         VaultStorage.Change(vault, VaultStorage.Action.DELETE,
                             index = index, itemId = slot.id, occurrence = occurrence))
@@ -687,7 +687,7 @@ class MainActivity : Activity() {
             }
         }
         dialog = AlertDialog.Builder(this).setTitle(label)
-            .setView(layout).setNegativeButton("Fechar", null).create()
+            .setView(layout).setNegativeButton("Close", null).create()
         dialog.show()
     }
 
@@ -772,7 +772,7 @@ class MainActivity : Activity() {
                 blocked.joinToString(", ") { it.path.substringAfterLast("/") } +
                 ".\n\nVocê pode escolher uma posição da grade para substituir em todos os saves. " +
                 "O editor mostrará os itens que serão removidos antes de confirmar.")
-            .setNegativeButton("Cancelar", null)
+            .setNegativeButton("Cancel", null)
             .setPositiveButton("Escolher espaço") { _, _ ->
                 chooseReplacementSlot(item, amount)
             }.show()
@@ -786,7 +786,7 @@ class MainActivity : Activity() {
         }.toTypedArray()
         AlertDialog.Builder(this).setTitle("Escolher espaço para ${item.name}")
             .setItems(list) { _, index -> confirmSlotReplacement(index, item, amount) }
-            .setNegativeButton("Cancelar", null).show()
+            .setNegativeButton("Cancel", null).show()
     }
 
     /**
@@ -812,7 +812,7 @@ class MainActivity : Activity() {
             .setMessage("O item ${item.name} ×$amount será colocado na posição ${index + 1} " +
                 "de TODOS os saves.\n\nConteúdo atual:\n$preview$warning" +
                 "\n\nO backup original não será modificado.")
-            .setNegativeButton("Cancelar", null)
+            .setNegativeButton("Cancel", null)
             .setPositiveButton("Confirmar substituição") { _, _ ->
                 applyChange("${item.name} ×$amount na posição ${index + 1}") { paths ->
                     EkBackup.EditPlan(paths, slotReplacements = listOf(
@@ -824,20 +824,20 @@ class MainActivity : Activity() {
 
     /** Abre o catálogo a partir de uma célula vazia da grade. */
     private fun showInsertIntoSlot(index: Int, item: ItemCatalog.Item) {
-        val input = number("Quantidade", "1")
+        val input = number("Quantity", "1")
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(8))
             addView(text(item.name, 13f, GOLD, true))
             addView(input, margin(7, 2))
         }
-        AlertDialog.Builder(this).setTitle("Adicionar item ao espaço ${index + 1}")
+        AlertDialog.Builder(this).setTitle("Add item ao espaço ${index + 1}")
             .setMessage("Se esta posição estiver ocupada em algum save, será exibida uma confirmação antes de substituí-la.")
             .setView(wrapper)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Adicionar") { _, _ ->
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Add") { _, _ ->
                 try {
-                    val amount = numberValue(input, "Quantidade do novo item", 999, 1).toInt()
+                    val amount = numberValue(input, "Quantity do novo item", 999, 1).toInt()
                     val occupiedSomewhere = saves.any { info ->
                         info.inventorySlots.getOrNull(index)?.id != 0
                     }
@@ -883,7 +883,7 @@ class MainActivity : Activity() {
                 handler()
             }, margin(2, 4))
         }
-        option(if (stackable) "＋  Adicionar mais unidades" else "＋  Adicionar outra cópia") {
+        option(if (stackable) "＋  Add mais unidades" else "＋  Add outra cópia") {
             val unitary = !stackable
             val input = number(if (unitary) "Quantas cópias?" else "Quantas unidades?", "1")
             val holder = LinearLayout(this).apply {
@@ -894,22 +894,22 @@ class MainActivity : Activity() {
                 addView(input, margin(4, 3))
             }
             AlertDialog.Builder(this)
-                .setTitle(if (unitary) "Adicionar cópias de $label" else "Somar unidades de $label")
+                .setTitle(if (unitary) "Add cópias de $label" else "Somar unidades de $label")
                 .setView(holder)
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton("Aplicar") { _, _ ->
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Apply") { _, _ ->
                     try {
-                        val amount = numberValue(input, "Quantidade", 999, 1).toInt()
+                        val amount = numberValue(input, "Quantity", 999, 1).toInt()
                         applyChange("+$amount ${if (unitary) "cópia(s)" else "unidade(s)"} de $label") { paths ->
                             EkBackup.EditPlan(paths, slotEdits = listOf(
                                 EkBackup.SlotEdit(index, slot.id, slot.count, amount,
                                     addQuantity = true, occurrence = occurrence)))
                         }
-                    } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
+                    } catch (e: Exception) { notifyError(e.message ?: "Quantity inválida") }
                 }.show()
         }
         if (stackable) option("✎  Definir quantidade do stack") {
-            val input = number("Quantidade desejada", slot.count.toString())
+            val input = number("Quantity desejada", slot.count.toString())
             val holder = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(18), dp(7), dp(18), dp(7))
@@ -918,24 +918,24 @@ class MainActivity : Activity() {
             }
             AlertDialog.Builder(this).setTitle("Definir quantidade de $label")
                 .setView(holder)
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton("Aplicar") { _, _ ->
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Apply") { _, _ ->
                     try {
-                        val amount = numberValue(input, "Quantidade", 999, 1).toInt()
-                        applyChange("Quantidade de $label = $amount") { paths ->
+                        val amount = numberValue(input, "Quantity", 999, 1).toInt()
+                        applyChange("Quantity de $label = $amount") { paths ->
                             EkBackup.EditPlan(paths, slotEdits = listOf(
                                 EkBackup.SlotEdit(index, slot.id, slot.count, amount,
                                     occurrence = occurrence)))
                         }
-                    } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
+                    } catch (e: Exception) { notifyError(e.message ?: "Quantity inválida") }
                 }.show()
         }
-        option("🗑  Excluir item") {
-            AlertDialog.Builder(this).setTitle("Excluir $label?")
+        option("🗑  Delete item") {
+            AlertDialog.Builder(this).setTitle("Delete $label?")
                 .setMessage("Será removida uma ocorrência deste ID em cada save onde existir. " +
                     "Nenhum item diferente será removido.")
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton("Excluir") { _, _ ->
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete") { _, _ ->
                     applyChange("Excluído $label") { paths ->
                         EkBackup.EditPlan(paths, slotEdits = listOf(
                             EkBackup.SlotEdit(index, slot.id, slot.count, 0,
@@ -949,13 +949,13 @@ class MainActivity : Activity() {
         dialog = AlertDialog.Builder(this)
             .setTitle(label)
             .setView(layout)
-            .setNegativeButton("Fechar", null)
+            .setNegativeButton("Close", null)
             .create()
         dialog.show()
     }
 
     private fun showReplacementQuantity(index: Int, item: ItemCatalog.Item) {
-        val input = number("Quantidade", "1")
+        val input = number("Quantity", "1")
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(8))
@@ -964,19 +964,19 @@ class MainActivity : Activity() {
         }
         AlertDialog.Builder(this).setTitle("Substituir espaço ${index + 1}")
             .setView(wrapper)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Continuar") { _, _ ->
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Continue") { _, _ ->
                 try {
-                    val amount = numberValue(input, "Quantidade", 999, 1).toInt()
+                    val amount = numberValue(input, "Quantity", 999, 1).toInt()
                     confirmSlotReplacement(index, item, amount)
-                } catch (e: Exception) { notifyError(e.message ?: "Quantidade inválida") }
+                } catch (e: Exception) { notifyError(e.message ?: "Quantity inválida") }
             }.show()
     }
 
     private fun confirmReset(message: String, callback: () -> Unit) {
         AlertDialog.Builder(this).setTitle("Confirmar zeramento")
-            .setMessage(message).setNegativeButton("Cancelar", null)
-            .setPositiveButton("Zerar") { _, _ -> callback() }.show()
+            .setMessage(message).setNegativeButton("Cancel", null)
+            .setPositiveButton("Reset") { _, _ -> callback() }.show()
     }
     private fun chooseCatalog(onlyPotions: Boolean, onPicked: ((ItemCatalog.Item) -> Unit)? = null) {
         val dialogView = LinearLayout(this).apply {
@@ -993,7 +993,7 @@ class MainActivity : Activity() {
         dialogView.addView(results, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(360)))
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (onlyPotions) "Escolher poção" else "Catálogo de itens")
-            .setView(dialogView).setNegativeButton("Cancelar", null).create()
+            .setView(dialogView).setNegativeButton("Cancel", null).create()
         var displayed = emptyList<ItemCatalog.Item>()
         fun refresh(query: String) {
             displayed = catalog.find(query, onlyPotions).take(250)
@@ -1043,7 +1043,7 @@ class MainActivity : Activity() {
     private fun notifyError(message: String) {
         setStatus("Erro: $message", false)
         AlertDialog.Builder(this).setTitle("EK Save Editor")
-            .setMessage(message).setPositiveButton("Entendi", null).show()
+            .setMessage(message).setPositiveButton("OK", null).show()
     }
     private fun numberValue(field: EditText, label: String, max: Long, min: Long = 0): Long {
         val raw = field.text.toString()
@@ -1071,12 +1071,12 @@ class MainActivity : Activity() {
             val traitReport = when {
                 requested.traitDelta != null || requested.resetTraits -> {
                     if (previous?.freeTraitPoints != null && first.freeTraitPoints != null)
-                        " Atributos: ${previous.freeTraitPoints} → ${first.freeTraitPoints}."
+                        " Attributes: ${previous.freeTraitPoints} → ${first.freeTraitPoints}."
                     else " Confira o bônus de atributos em todos os saves."
                 }
                 requested.skillDelta != null || requested.resetSkills -> {
                     if (previous?.freeSkillPoints != null && first.freeSkillPoints != null)
-                        " Habilidades: ${previous.freeSkillPoints} → ${first.freeSkillPoints}."
+                        " Skills: ${previous.freeSkillPoints} → ${first.freeSkillPoints}."
                     else " Confira o bônus de habilidades em todos os saves."
                 }
                 else -> ""
@@ -1100,13 +1100,13 @@ class MainActivity : Activity() {
         val representative = previewSave()
         updateCharacterSummary()
         if (representative == null) {
-            goldCurrent.text = "Ouro atual: —"
-            traitCurrent.text = "Pontos livres atuais: —"
-            skillCurrent.text = "Habilidades livres atuais: —"
-            itemsCurrent.text = "Nenhum inventário carregado"
+            goldCurrent.text = "Current gold: —"
+            traitCurrent.text = "Available points: —"
+            skillCurrent.text = "Available skill points: —"
+            itemsCurrent.text = "No inventory loaded"
             inventoryGrid.removeAllViews()
             vaultGrid.removeAllViews()
-            vaultSummary.text = "Importe EK.bak para consultar os baús."
+            vaultSummary.text = "Import EK.bak to view vaults."
             vaultUnlockButton.visibility = View.GONE
             companionCard.visibility = View.GONE
             return
@@ -1114,22 +1114,22 @@ class MainActivity : Activity() {
         fun <T> value(label: String, values: List<T>, reference: T): String {
             return "$label: $reference${if (values.distinct().size > 1) " (outros saves diferem)" else ""}"
         }
-        goldCurrent.text = value("Ouro atual", saves.map { it.gold }, representative.gold)
+        goldCurrent.text = value("Current gold", saves.map { it.gold }, representative.gold)
         traitCurrent.text = if (representative.freeTraitPoints == null) {
             "Pontos livres: cálculo indisponível (nível ou histórico de gastos ausente).\n" +
                 "Pontos extras registrados: ${representative.traitPoints}"
         } else {
             value("Pontos livres reais", saves.map { it.freeTraitPoints }, representative.freeTraitPoints) +
                 "\nBônus extras no arquivo: ${representative.traitPoints}" +
-                " • Nível ${representative.characterLevel}" +
+                " • Level ${representative.characterLevel}" +
                 " • Gastos: ${representative.spentTraitPoints}"
         }
         skillCurrent.text = if (representative.freeSkillPoints == null) {
             "Pontos livres: cálculo indisponível (habilidade de custo não catalogado).\n" +
-                "Bônus de habilidades no arquivo: ${representative.skillPoints}"
+                "Bonus skill points no arquivo: ${representative.skillPoints}"
         } else {
             value("Pontos livres reais", saves.map { it.freeSkillPoints }, representative.freeSkillPoints) +
-                "\nBônus de habilidades: ${representative.skillPoints}" +
+                "\nBonus skill points: ${representative.skillPoints}" +
                 " • Gastos: ${representative.spentSkillPoints}"
         }
         if (fillGold) goldInput.setText(representative.gold.toString())
@@ -1144,15 +1144,15 @@ class MainActivity : Activity() {
             val companion = representative.companion ?: companions.first()
             companionTitle.text = companion.name
             companionTraitCurrent.text = if (companion.freeTraitPoints == null) {
-                "Atributos livres: indisponível • bônus extras: ${companion.traitPoints}"
+                "Available attributes: indisponível • bônus extras: ${companion.traitPoints}"
             } else {
-                value("Atributos livres reais", companions.map { it.freeTraitPoints }, companion.freeTraitPoints) +
+                value("Available attribute points", companions.map { it.freeTraitPoints }, companion.freeTraitPoints) +
                     "\nBônus extras: ${companion.traitPoints} • Gastos: ${companion.spentTraitPoints}"
             }
             companionSkillCurrent.text = if (companion.freeSkillPoints == null) {
-                "Habilidades livres: indisponível • bônus extras: ${companion.skillPoints}"
+                "Available skills: indisponível • bônus extras: ${companion.skillPoints}"
             } else {
-                value("Habilidades livres reais", companions.map { it.freeSkillPoints }, companion.freeSkillPoints) +
+                value("Available skill points", companions.map { it.freeSkillPoints }, companion.freeSkillPoints) +
                     "\nBônus extras: ${companion.skillPoints} • Gastos: ${companion.spentSkillPoints}"
             }
             companionCard.visibility = View.VISIBLE
@@ -1175,7 +1175,7 @@ class MainActivity : Activity() {
         originalBytes = data.copyOf()
         editedBytes = data.copyOf()
         appliedChanges = 0
-        lastChange.text = "Nenhuma alteração aplicada nesta sessão."
+        lastChange.text = "No changes made in this session."
         lastChange.setTextColor(MUTED)
         refreshPreview(true)
         updateEnabled()
@@ -1191,7 +1191,7 @@ class MainActivity : Activity() {
         if (appliedChanges == 0) choose()
         else AlertDialog.Builder(this).setTitle("Descartar modificações?")
             .setMessage("Há edições não exportadas. Exporte o backup antes de importar outro arquivo se quiser preservá-las.")
-            .setNegativeButton("Cancelar", null)
+            .setNegativeButton("Cancel", null)
             .setPositiveButton("Abrir outro backup") { _, _ -> choose() }.show()
     }
     private fun writeToPicker(bytes: ByteArray, name: String) {
@@ -1231,7 +1231,7 @@ class MainActivity : Activity() {
                     setStatus("✓ EK.bak exportado e conferido (${checked.size}/${saves.size} saves).", true)
                     AlertDialog.Builder(this).setTitle("Arquivo salvo e conferido")
                         .setMessage("A escrita foi verificada: ${checked.size} saves no EK.bak exportado.\n\nCopie o arquivo modificado para:\n$GAME_PATH\n\nDepois abra Exiled Kingdoms e escolha RESTAURAR BACKUP. Confira o nome final do arquivo no gerenciador, pois alguns aplicativos acrescentam números quando já existe EK.bak.")
-                        .setPositiveButton("Entendi", null).show()
+                        .setPositiveButton("OK", null).show()
                 }
             }
         } catch (e: Exception) { notifyError("Falha no arquivo: ${e.message}") }
