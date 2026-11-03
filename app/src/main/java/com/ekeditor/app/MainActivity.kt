@@ -344,7 +344,7 @@ class MainActivity : Activity() {
         companionCard.addView(companionSkillCurrent, margin(10, 5))
         companionCard.addView(companionSkillInput)
         companionCard.addView(editAction("+  Add companion skill points") {
-            val n = numberValue(companionSkillInput, "Skills do companheiro", 999, 1).toInt()
+            val n = numberValue(companionSkillInput, "Companion skills", 999, 1).toInt()
             applyChange("+$n companion skill points") { paths -> EkBackup.EditPlan(paths, companionSkillDelta = n) }
         }, margin(4, 6))
         companionCard.addView(editAction("↺  Reset companion skill points") {
@@ -756,8 +756,8 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Se algum save estiver cheio E sem o item escolhido, a inserção sem
-     * perda é impossível. Exibe os slots disponíveis para substituição.
+     * If any save is full AND the selected item is missing, adding without
+     * replacing an item is impossible. Show slots available for replacement.
      */
     private fun addOrChooseReplacement(item: ItemCatalog.Item, amount: Int) {
         val blocked = saves.filter { item.id !in it.inventory && it.freeSlots == 0 }
@@ -768,7 +768,7 @@ class MainActivity : Activity() {
             return
         }
         AlertDialog.Builder(this).setTitle("Inventory full in ${blocked.size} save(s)")
-            .setMessage("The item does not exist e não há slot disponível em: " +
+            .setMessage("This item is not present and there are no free slots in: " +
                 blocked.joinToString(", ") { it.path.substringAfterLast("/") } +
                 ".\n\nYou can choose a grid slot to replace in all of this character's saves. " +
                 "The editor will show which items would be removed before you confirm.")
@@ -790,8 +790,8 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Atualiza a célula escolhida em todos os saves mesmo com inventários
-     * diferentes, somente após confirmação com resumo por arquivo.
+     * Update the selected slot across all saves even when inventories
+     * differ, only after showing a per-save confirmation.
      */
     private fun confirmSlotReplacement(index: Int, item: ItemCatalog.Item, amount: Int) {
         val all = saves.associate { info ->
@@ -822,7 +822,7 @@ class MainActivity : Activity() {
             }.show()
     }
 
-    /** Abre o catálogo a partir de uma célula vazia da grade. */
+    /** Open the item catalog when an empty grid slot is selected. */
     private fun showInsertIntoSlot(index: Int, item: ItemCatalog.Item) {
         val input = number("Quantity", "1")
         val wrapper = LinearLayout(this).apply {
@@ -908,7 +908,7 @@ class MainActivity : Activity() {
                     } catch (e: Exception) { notifyError(e.message ?: "Invalid quantity") }
                 }.show()
         }
-        if (stackable) option("✎  Set quantity do stack") {
+        if (stackable) option("✎  Set stack quantity") {
             val input = number("Desired quantity", slot.count.toString())
             val holder = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -1060,7 +1060,7 @@ class MainActivity : Activity() {
             val paths = allPaths()
             val requested = plan(paths)
             val before = saves.associateBy { it.path }
-            val result = EkBackup.apply(source, requested) // sem alterações parciais
+            val result = EkBackup.apply(source, requested) // transactional: no partial changes
             val readback = EkBackup.inspect(result)
             val selectedReadback = readback.filter { it.characterSlot == selectedCharacterSlot }
             require(selectedReadback.map { it.path }.toSet() == paths) {
