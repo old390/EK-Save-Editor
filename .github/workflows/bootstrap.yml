@@ -21,7 +21,7 @@ jobs:
           tar -xJf /tmp/ek-source.tar.xz
           test -f app/build.gradle.kts
           test -f .github/workflows/android.yml
-          git add README.md TESTES.md app build.gradle.kts settings.gradle.kts gradle.properties tools catalogo .github/workflows/android.yml
+          git add README.md TESTES.md app build.gradle.kts settings.gradle.kts gradle.properties tools catalogo
           if ! git diff --cached --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
