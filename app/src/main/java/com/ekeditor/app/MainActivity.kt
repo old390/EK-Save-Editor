@@ -48,6 +48,11 @@ class MainActivity : Activity() {
     private var originalBytes: ByteArray? = null
     private var editedBytes: ByteArray? = null
     private var pendingExport: ByteArray? = null
+    /** Todos os personagens são mantidos juntos; só os saves do selecionado são editáveis. */
+    private var allSaves = emptyList<EkBackup.SaveInfo>()
+    private var selectedCharacterSlot = 0
+    private lateinit var characterButton: Button
+    private lateinit var characterSummary: TextView
     private var saves = emptyList<EkBackup.SaveInfo>()
     private var appliedChanges = 0
     private lateinit var catalog: ItemCatalog
@@ -96,7 +101,11 @@ class MainActivity : Activity() {
                 val parsed = EkBackup.inspect(edited)
                 originalBytes = original
                 editedBytes = edited
-                saves = parsed
+                allSaves = parsed
+                selectedCharacterSlot = savedInstanceState.getInt("selected_character_slot", 0)
+                if (parsed.none { it.characterSlot == selectedCharacterSlot })
+                    selectedCharacterSlot = parsed.first().characterSlot
+                saves = parsed.filter { it.characterSlot == selectedCharacterSlot }
                 appliedChanges = savedInstanceState.getInt("applied_changes")
                 selectedItem = catalog.items.firstOrNull { it.id == savedInstanceState.getInt("item_id", -1) }
                 selectedPotion = catalog.items.firstOrNull { it.id == savedInstanceState.getInt("potion_id", -1) }
@@ -124,6 +133,7 @@ class MainActivity : Activity() {
             outState.putInt("item_id", selectedItem?.id ?: -1)
             outState.putInt("potion_id", selectedPotion?.id ?: -1)
             outState.putInt("selected_vault", selectedVault)
+            outState.putInt("selected_character_slot", selectedCharacterSlot)
         }
     }
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -184,7 +194,7 @@ class MainActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
         }, margin(0, 12))
-        body.addView(text("Editor de saves feito por old390 • v0.6.0", 16f, GOLD, true).apply {
+        body.addView(text("Editor de saves feito por old390 • v0.7.0", 16f, GOLD, true).apply {
             gravity = Gravity.CENTER
         }, margin(0, 3))
         body.addView(text("github.com/old390/EK-Save-Editor", 12f, MUTED).apply {
@@ -200,6 +210,17 @@ class MainActivity : Activity() {
         files.addView(action("📂  Selecionar EK.bak") { importBackup() }, margin(2, 5))
         files.addView(action("🔎  Conferir valores de todos os saves") { showAllSaveAudit() }, margin(1, 6))
         body.addView(files, margin(0, 12))
+
+        val characters = section("👤  Escolher personagem",
+            "O backup pode conter vários personagens. Selecione um para ver seu inventário, " +
+                "companheiro, atributos, habilidades e baús. Todas as edições afetarão somente os saves dele.")
+        characterButton = action("Selecionar personagem") { showCharacterMenu() }.apply {
+            isEnabled = false
+        }
+        characterSummary = text("Importe EK.bak para encontrar personagens.", 13f, MUTED)
+        characters.addView(characterButton, margin(2, 5))
+        characters.addView(characterSummary, margin(6, 3))
+        body.addView(characters, margin(0, 12))
 
         val inventory = section("🎒  Inventário, itens e poções", "Grade visual dos espaços reais de um save de referência. As edições continuam sendo aplicadas a todos os saves.")
         itemsCurrent = text("Nenhum inventário carregado", 13f, TEXT)
@@ -353,11 +374,53 @@ class MainActivity : Activity() {
         body.addView(text("Aplicativo independente; não afiliado aos criadores do jogo. Catálogo de IDs: comunidade Steam (2021).", 11f, MUTED).apply { gravity = Gravity.CENTER })
         updateEnabled()
     }
+    private fun selectedCharacterInfo(): EkBackup.CharacterInfo? =
+        EkBackup.characters(allSaves).firstOrNull { it.slot == selectedCharacterSlot }
+
+    private fun updateCharacterSummary() {
+        val characters = EkBackup.characters(allSaves)
+        val selected = selectedCharacterInfo()
+        characterButton.text = if (selected == null) "👤  Selecionar personagem"
+            else "👤  ${selected.name} · escolher outro"
+        characterSummary.text = if (selected == null) {
+            "Importe EK.bak para encontrar personagens."
+        } else {
+            "${selected.name} · ${selected.characterClass} · " +
+                "Nível ${selected.level ?: "?"} · ${selected.savePaths.size} save(s)\n" +
+                "${characters.size} personagem(ns) encontrado(s). " +
+                "As alterações atingirão exclusivamente os arquivos da pasta saves/${selected.slot}/."
+        }
+    }
+
+    private fun showCharacterMenu() {
+        val available = EkBackup.characters(allSaves)
+        if (available.isEmpty()) return notifyError("Importe EK.bak primeiro")
+        val labels = available.map { character ->
+            "${character.name} · ${character.characterClass} · Nível ${character.level ?: "?"} " +
+                "(${character.savePaths.size} saves)"
+        }.toTypedArray()
+        val current = available.indexOfFirst { it.slot == selectedCharacterSlot }
+        AlertDialog.Builder(this).setTitle("Selecionar personagem")
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                val chosen = available[which]
+                selectedCharacterSlot = chosen.slot
+                saves = allSaves.filter { it.characterSlot == chosen.slot }
+                selectedVault = 1
+                dialog.dismiss()
+                refreshPreview(true)
+                setStatus("✓ ${chosen.name} selecionado. Apenas seus ${saves.size} saves serão editados.", true)
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
     private fun showAllSaveAudit() {
         try {
             val currentBytes = editedBytes ?: return notifyError("Importe EK.bak primeiro")
-            val updated = EkBackup.inspect(currentBytes)
-            val originals = originalBytes?.let { EkBackup.inspect(it).associateBy { info -> info.path } } ?: emptyMap()
+            val updated = EkBackup.inspect(currentBytes).filter {
+                it.characterSlot == selectedCharacterSlot
+            }
+            val originals = originalBytes?.let {
+                EkBackup.inspect(it).associateBy { info -> info.path }
+            } ?: emptyMap()
             val details = updated.joinToString("\n\n") { info ->
                 val previous = originals[info.path]
                 val shortPath = info.path.substringAfter("saves/")
@@ -377,7 +440,7 @@ class MainActivity : Activity() {
                     } ?: "")
             }
             AlertDialog.Builder(this)
-                .setTitle("Conferência: ${updated.size}/${updated.size} saves")
+                .setTitle("Conferência de ${selectedCharacterInfo()?.name ?: "personagem"}: ${updated.size} saves")
                 .setMessage("Estes são os valores gravados no backup em memória. Ainda será necessário exportar e restaurar pelo jogo.\n\n$details")
                 .setPositiveButton("Entendi", null).show()
         } catch (e: Exception) { notifyError("Conferência falhou: ${e.message}") }
@@ -385,7 +448,8 @@ class MainActivity : Activity() {
 
     private fun vaultData(): Map<String, List<VaultStorage.VaultInfo>> {
         val data = editedBytes ?: return emptyMap()
-        return EkBackup.inspectVaults(data)
+        val paths = saves.map { it.path }.toSet()
+        return EkBackup.inspectVaults(data).filterKeys { it in paths }
     }
 
     private fun selectedVaultData(): Map<String, VaultStorage.VaultInfo> =
@@ -998,7 +1062,11 @@ class MainActivity : Activity() {
             val before = saves.associateBy { it.path }
             val result = EkBackup.apply(source, requested) // sem alterações parciais
             val readback = EkBackup.inspect(result)
-            val first = readback.first()
+            val selectedReadback = readback.filter { it.characterSlot == selectedCharacterSlot }
+            require(selectedReadback.map { it.path }.toSet() == paths) {
+                "Os saves do personagem selecionado não conferem"
+            }
+            val first = selectedReadback.first()
             val previous = before[first.path]
             val traitReport = when {
                 requested.traitDelta != null || requested.resetTraits -> {
@@ -1014,7 +1082,8 @@ class MainActivity : Activity() {
                 else -> ""
             }
             editedBytes = result
-            saves = readback
+            allSaves = readback
+            saves = selectedReadback
             appliedChanges++
             lastChange.text = "✓ $label conferido em ${paths.size}/${paths.size} saves.$traitReport " +
                 "$appliedChanges alteração(ões) em memória. Exporte EK.bak para salvar."
@@ -1029,6 +1098,7 @@ class MainActivity : Activity() {
         ?: saves.firstOrNull()
     private fun refreshPreview(fillGold: Boolean) {
         val representative = previewSave()
+        updateCharacterSummary()
         if (representative == null) {
             goldCurrent.text = "Ouro atual: —"
             traitCurrent.text = "Pontos livres atuais: —"
@@ -1087,16 +1157,21 @@ class MainActivity : Activity() {
             }
             companionCard.visibility = View.VISIBLE
         } else companionCard.visibility = View.GONE
-        sourceDetails.text = "${saves.size} saves identificados. ${if (appliedChanges == 0) "Nenhuma edição aplicada." else "$appliedChanges edição(ões) aplicada(s) em todos."}"
+        sourceDetails.text = "${saves.size} saves do personagem selecionado · " +
+            "${EkBackup.characters(allSaves).size} personagem(ns) no EK.bak. " +
+            if (appliedChanges == 0) "Nenhuma edição aplicada." else "$appliedChanges edição(ões) aplicadas no backup."
     }
     private fun updateEnabled() {
         val present = editedBytes != null
+        characterButton.isEnabled = present
         editButtons.forEach { it.isEnabled = present }
         originalButton.isEnabled = originalBytes != null
         exportButton.isEnabled = present && appliedChanges > 0
     }
     private fun loadBytes(data: ByteArray) {
-        saves = EkBackup.inspect(data)
+        allSaves = EkBackup.inspect(data)
+        selectedCharacterSlot = EkBackup.characters(allSaves).first().slot
+        saves = allSaves.filter { it.characterSlot == selectedCharacterSlot }
         originalBytes = data.copyOf()
         editedBytes = data.copyOf()
         appliedChanges = 0
