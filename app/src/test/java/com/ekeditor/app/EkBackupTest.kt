@@ -1087,4 +1087,116 @@ class EkBackupTest {
         })
     }
 
+
+    /** Duas pastas de personagens diferentes: /0 com 4 saves, /2 com 3. */
+    private fun twoCharactersBackup(): ByteArray =
+        ByteArrayOutputStream().also { output ->
+            ZipOutputStream(output).use { zip ->
+                for (name in listOf("auto.sav", "auto2.sav", "game.sav", "game2.sav")) {
+                    val content = String(Base64.getDecoder().decode(save(5000)), Charsets.UTF_8)
+                        .replace("name: Test Warrior", "name: Arthur da Cruz")
+                    zip.putNextEntry(ZipEntry("saves/0/$name"))
+                    zip.write(Base64.getEncoder().encode(content.toByteArray(Charsets.UTF_8)))
+                    zip.closeEntry()
+                }
+                // Save inicial de personagem: sem extraTraitPoints e bonusPoints.
+                for (name in listOf("auto.sav", "game.sav", "game2.sav")) {
+                    val content = String(Base64.getDecoder().decode(save(200)), Charsets.UTF_8)
+                        .replace("name: Test Warrior", "name: Shep Sossar")
+                        .replace("\t\t\t\textraTraitPoints: 2\n", "")
+                        .replace("\t\t\t\tbonusPoints: 3\n", "")
+                    zip.putNextEntry(ZipEntry("saves/2/$name"))
+                    zip.write(Base64.getEncoder().encode(content.toByteArray(Charsets.UTF_8)))
+                    zip.closeEntry()
+                }
+                zip.putNextEntry(ZipEntry("saves/global.sav"))
+                zip.write("game-wide state".toByteArray())
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry("saves/2/levels/I10_tutorial_tiles.txt"))
+                zip.write("character level data".toByteArray())
+                zip.closeEntry()
+            }
+        }.toByteArray()
+
+    @Test fun multipleCharactersFoundByFolderEvenWithNoSavesOne() {
+        val archive = twoCharactersBackup()
+        val inspected = EkBackup.inspect(archive)
+        assertEquals(7, inspected.size)
+        val characters = EkBackup.characters(inspected)
+        assertEquals(2, characters.size)
+        assertEquals(listOf(0, 2), characters.map { it.slot })
+        assertEquals(listOf("Arthur da Cruz", "Shep Sossar"), characters.map { it.name })
+        assertEquals(listOf(4, 3), characters.map { it.savePaths.size })
+        assertTrue(characters[0].savePaths.all { it.startsWith("saves/0/") })
+        assertTrue(characters[1].savePaths.all { it.startsWith("saves/2/") })
+        assertTrue(EkBackup.inspectVaults(archive).getValue("saves/2/auto.sav").isEmpty())
+        assertTrue(inspected.filter { it.characterSlot == 2 }.all {
+            it.traitPoints == 0 && it.skillPoints == 0
+        })
+    }
+
+    @Test fun editingSecondCharacterDoesNotModifyAnyFirstCharacterSave() {
+        val original = twoCharactersBackup()
+        val characters = EkBackup.characters(EkBackup.inspect(original))
+        val selected = characters.single { it.slot == 2 }.savePaths
+        val before = entries(original)
+        val updated = EkBackup.apply(original, EkBackup.EditPlan(selected,
+            gold = 9999, traitDelta = 20, skillDelta = 10))
+        val after = entries(updated)
+        assertEquals(before.keys, after.keys)
+        for ((path, bytes) in before) if (path !in selected) {
+            assertTrue("O arquivo $path não deveria ser alterado", bytes.contentEquals(after.getValue(path)))
+        }
+        assertEquals(3, selected.size)
+        val readback = EkBackup.inspect(updated)
+        assertTrue(readback.filter { it.characterSlot == 2 }.all {
+            it.gold == 9999L && it.traitPoints == 20 && it.skillPoints == 10
+        })
+        assertTrue(readback.filter { it.characterSlot == 0 }.all {
+            it.gold == 5000L && it.traitPoints == 2 && it.skillPoints == 3
+        })
+    }
+
+    @Test fun switchingBetweenTwoCharactersPreservesChangesToBoth() {
+        val original = twoCharactersBackup()
+        val first = EkBackup.characters(EkBackup.inspect(original))
+        val p2 = first.single { it.slot == 2 }.savePaths
+        val p0 = first.single { it.slot == 0 }.savePaths
+        val shepEdited = EkBackup.apply(original, EkBackup.EditPlan(p2, gold = 7777L))
+        val bothEdited = EkBackup.apply(shepEdited, EkBackup.EditPlan(p0, gold = 8888L))
+        val final = EkBackup.inspect(bothEdited)
+        assertTrue(final.filter { it.characterSlot == 2 }.all { it.gold == 7777L })
+        assertTrue(final.filter { it.characterSlot == 0 }.all { it.gold == 8888L })
+        assertEquals("game-wide state", String(entries(bothEdited).getValue("saves/global.sav")))
+        assertEquals("character level data",
+            String(entries(bothEdited).getValue("saves/2/levels/I10_tutorial_tiles.txt")))
+    }
+
+    @Test fun mixingCharacterGroupsInOneEditIsRejected() {
+        val original = twoCharactersBackup()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val failure = runCatching {
+            EkBackup.apply(original, EkBackup.EditPlan(all, gold = 9999L))
+        }
+        assertTrue(failure.isFailure)
+        assertTrue(failure.exceptionOrNull()?.message?.contains("único personagem") == true)
+    }
+
+    @Test fun newlyCreatedCharacterSupportsItemInsertionWithMissingBonusFields() {
+        val original = twoCharactersBackup()
+        val selected = EkBackup.characters(EkBackup.inspect(original))
+            .single { it.slot == 2 }.savePaths
+        val originalOthers = entries(original).filterKeys { it.startsWith("saves/0/") }
+        val updated = EkBackup.apply(original, EkBackup.EditPlan(selected,
+            items = listOf(EkBackup.ItemAdd(5013, 2))))
+        val info = EkBackup.inspect(updated).filter { it.characterSlot == 2 }
+        assertTrue(info.all { it.inventory[5013] == 2 })
+        assertTrue(info.all { it.inventorySlots.count { slot ->
+            slot.id == 5013 && slot.count == 1
+        } == 2 })
+        assertTrue(originalOthers.all { (key, bytes) ->
+            bytes.contentEquals(entries(updated).getValue(key))
+        })
+    }
+
 }
