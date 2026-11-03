@@ -858,15 +858,49 @@ class EkBackupTest {
             .contentEquals(entries(edited).getValue("saves/global.sav")))
     }
 
-    @Test fun repeatedIdWithDifferentCountsEditsClickedOrdinalNotFirstStack() {
-        val original = duplicatedFourSaves()
-        val paths = EkBackup.inspect(original).map { it.path }.toSet()
-        val replaced = EkBackup.apply(original, EkBackup.EditPlan(paths,
-            slotReplacements = listOf(EkBackup.SlotReplace(0, 5070, 5,
-                EkBackup.inspect(original).associate { it.path to it.inventorySlots[0] }))))
-        // The replacement makes different slot contents. Instead, explicitly add
-        // medipacks to empty slots across all saves to check ordinal handling.
-        assertEquals(4, EkBackup.inspect(replaced).size)
+
+    @Test fun repeatedStackableIdChangesOnlyChosenOrdinalInFourSaves() {
+        val amounts = mapOf(
+            "auto.sav" to ("5070, 554, 5070, 0" to "5, 1, 9, 0"),
+            "auto2.sav" to ("554, 5070, 0, 5070" to "1, 7, 0, 12"),
+            "game.sav" to ("5070, 5070, 554, 0" to "11, 20, 1, 0"),
+            "game2.sav" to ("0, 5070, 5070, 554" to "0, 33, 44, 1")
+        )
+        val original = ByteArrayOutputStream().also { output ->
+            ZipOutputStream(output).use { zip ->
+                for ((name, pair) in amounts) {
+                    val plain = String(Base64.getDecoder().decode(save(100)), Charsets.UTF_8)
+                        .replace("itemList: [ 0, 0, 0, 0 ]", "itemList: [ ${pair.first} ]")
+                        .replace("stackUnits: [ 0, 0, 0, 0 ]", "stackUnits: [ ${pair.second} ]")
+                    zip.putNextEntry(ZipEntry("saves/0/$name"))
+                    zip.write(Base64.getEncoder().encode(plain.toByteArray(Charsets.UTF_8)))
+                    zip.closeEntry()
+                }
+            }
+        }.toByteArray()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val replaced = EkBackup.apply(original, EkBackup.EditPlan(all,
+            slotEdits = listOf(EkBackup.SlotEdit(2, 5070, 9, 25, occurrence = 1))))
+        for (info in EkBackup.inspect(replaced)) {
+            val ids = info.inventorySlots.indices.filter { info.inventorySlots[it].id == 5070 }
+            assertEquals(2, ids.size)
+            assertEquals(25, info.inventorySlots[ids[1]].count)
+            val expectedFirst = when (info.path.substringAfterLast('/')) {
+                "auto.sav" -> 5
+                "auto2.sav" -> 7
+                "game.sav" -> 11
+                else -> 33
+            }
+            assertEquals(expectedFirst, info.inventorySlots[ids[0]].count)
+        }
+        val more = EkBackup.apply(replaced, EkBackup.EditPlan(all,
+            slotEdits = listOf(EkBackup.SlotEdit(2, 5070, 25, 3,
+                addQuantity = true, occurrence = 1))))
+        val removed = EkBackup.apply(more, EkBackup.EditPlan(all,
+            slotEdits = listOf(EkBackup.SlotEdit(2, 5070, 28, 0, occurrence = 1))))
+        assertTrue(EkBackup.inspect(removed).all { info ->
+            info.inventorySlots.count { it.id == 5070 } == 1
+        })
     }
 
     @Test fun unitaryDuplicateWorksWhenOtherSaveHasDifferentNumberOfCopies() {
