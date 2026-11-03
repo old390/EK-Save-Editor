@@ -30,8 +30,11 @@ object EkBackup {
         val skillPoints: Int,
         val freeSlots: Int,
         val inventory: Map<Int, Int>,
-        val companion: CompanionInfo? = null
+        val companion: CompanionInfo? = null,
+        val inventorySlots: List<InventorySlot> = emptyList()
     )
+    /** Item na posição real do inventário, preservando inclusive espaços vazios. */
+    data class InventorySlot(val id: Int, val count: Int)
     data class ItemAdd(val id: Int, val count: Int = 1)
     data class EditPlan(
         val targetPaths: Set<String>,
@@ -206,7 +209,8 @@ object EkBackup {
             freeSlots = ids.count { it == 0 },
             inventory = ids.zip(units).filter { it.first > 0 }
                 .groupBy({ it.first }, { it.second }).mapValues { (_, amounts) -> amounts.sum() },
-            companion = companionInfo(text)
+            companion = companionInfo(text),
+            inventorySlots = ids.zip(units).map { (id, count) -> InventorySlot(id, count) }
         )
     }.also { require(it.isNotEmpty()) { "Nenhum save reconhecido no EK.bak" } }
 

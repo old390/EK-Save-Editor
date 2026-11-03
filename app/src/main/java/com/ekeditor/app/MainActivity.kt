@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
@@ -64,6 +65,7 @@ class MainActivity : Activity() {
     private lateinit var companionTraitInput: EditText
     private lateinit var companionSkillInput: EditText
     private lateinit var itemsCurrent: TextView
+    private lateinit var inventoryGrid: LinearLayout
     private lateinit var itemSelectionLabel: TextView
     private lateinit var potionSelectionLabel: TextView
     private lateinit var itemAmount: EditText
@@ -184,11 +186,15 @@ class MainActivity : Activity() {
         files.addView(status, margin(2, 7))
         files.addView(sourceDetails, margin(5, 8))
         files.addView(action("📂  Selecionar EK.bak") { importBackup() }, margin(2, 5))
+        files.addView(action("🔎  Conferir valores de todos os saves") { showAllSaveAudit() }, margin(1, 6))
         body.addView(files, margin(0, 12))
 
-        val inventory = section("🎒  Inventário, itens e poções", "Exibe uma única lista de referência do auto-save. Todas as alterações atingem todos os saves.")
+        val inventory = section("🎒  Inventário, itens e poções", "Grade visual dos espaços reais de um save de referência. As edições continuam sendo aplicadas a todos os saves.")
         itemsCurrent = text("Nenhum inventário carregado", 13f, TEXT)
-        inventory.addView(itemsCurrent, margin(0, 12))
+        inventory.addView(itemsCurrent, margin(0, 7))
+        inventoryGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        inventory.addView(inventoryGrid, margin(1, 5))
+        inventory.addView(text("Ícones simbólicos de categorias, não imagens oficiais do jogo. Toque em um espaço ocupado para ver o nome completo do item.", 11f, MUTED), margin(4, 12))
         inventory.addView(text("Adicionar item do catálogo", 13f, GOLD, true))
         itemSelectionLabel = text("Nenhum item selecionado", 13f, TEXT)
         inventory.addView(itemSelectionLabel, margin(7, 3))
@@ -290,7 +296,7 @@ class MainActivity : Activity() {
         body.addView(companionCard, margin(0, 4))
         body.addView(text("Quando houver um companheiro ativo no backup, os campos de atributos e habilidades dele aparecerão aqui.", 12f, MUTED), margin(4, 12))
 
-        val export = section("🛡️  Exportar e restaurar", "As mudanças ficam no aplicativo até você exportar o EK.bak e restaurá-lo pelo próprio jogo.")
+        val export = section("🛡️  Exportar e restaurar", "As mudanças ficam no aplicativo até exportar o EK.bak e restaurá-lo pelo jogo. Confira todos os saves antes de exportar.")
         lastChange = text("Nenhuma alteração aplicada nesta sessão.", 13f, MUTED)
         export.addView(lastChange, margin(2, 9))
         exportButton = action("💾  Exportar EK.bak modificado", true) {
@@ -308,6 +314,83 @@ class MainActivity : Activity() {
         body.addView(text("Aplicativo independente; não afiliado aos criadores do jogo. Catálogo de IDs: comunidade Steam (2021).", 11f, MUTED).apply { gravity = Gravity.CENTER })
         updateEnabled()
     }
+    private fun showAllSaveAudit() {
+        try {
+            val currentBytes = editedBytes ?: return notifyError("Importe EK.bak primeiro")
+            val updated = EkBackup.inspect(currentBytes)
+            val originals = originalBytes?.let { EkBackup.inspect(it).associateBy { info -> info.path } } ?: emptyMap()
+            val details = updated.joinToString("\n\n") { info ->
+                val previous = originals[info.path]
+                val shortPath = info.path.substringAfter("saves/")
+                fun format(old: Any?, now: Any) = if (old == null || old == now) "$now" else "$old → $now"
+                "• $shortPath\n" +
+                    "Ouro: ${format(previous?.gold, info.gold)}\n" +
+                    "Atributos livres: ${format(previous?.traitPoints, info.traitPoints)}\n" +
+                    "Habilidades livres: ${format(previous?.skillPoints, info.skillPoints)}"
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Conferência: ${updated.size}/${updated.size} saves")
+                .setMessage("Estes são os valores gravados no backup em memória. Ainda será necessário exportar e restaurar pelo jogo.\n\n$details")
+                .setPositiveButton("Entendi", null).show()
+        } catch (e: Exception) { notifyError("Conferência falhou: ${e.message}") }
+    }
+
+    /** Representação visual fiel às posições reais, com símbolos genéricos por tipo de item. */
+    private fun refreshInventoryGrid(reference: EkBackup.SaveInfo) {
+        inventoryGrid.removeAllViews()
+        val slots = reference.inventorySlots
+        fun iconFor(name: String, occupied: Boolean): String {
+            if (!occupied) return "·"
+            val n = name.lowercase()
+            return when {
+                listOf("potion", "elixir", "medipack", "flask", "draught", "mead", "rum", "venom", "apple", "omelette").any { n.contains(it) } -> "🧪"
+                listOf("sword", "dagger", "blade", "mace", "axe", "bow", "staff", "hammer", "spear").any { n.contains(it) } -> "⚔️"
+                listOf("shield", "armor", "armour", "helmet", "boots", "gloves", "cloak", "robe", "chestplate").any { n.contains(it) } -> "🛡️"
+                listOf("ring", "necklace", "amulet", "belt", "jewel").any { n.contains(it) } -> "💍"
+                listOf("tome", "scroll", "book", "letter", "map").any { n.contains(it) } -> "📜"
+                else -> "📦"
+            }
+        }
+        for (group in slots.withIndex().toList().chunked(4)) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for ((index, slot) in group) {
+                val occupied = slot.id != 0
+                val label = if (occupied) catalog.name(slot.id) else "Vazio"
+                val tile = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(dp(3), dp(4), dp(3), dp(4))
+                    background = shape(if (occupied) Color.rgb(43, 50, 57) else Color.rgb(15, 22, 27),
+                        if (occupied) Color.rgb(150, 117, 73) else Color.rgb(48, 58, 62))
+                    contentDescription = "Espaço ${index + 1}: $label"
+                    if (occupied) setOnClickListener {
+                        AlertDialog.Builder(this@MainActivity).setTitle(label)
+                            .setMessage("Espaço ${index + 1} de ${slots.size}" +
+                                if (slot.count > 1) "\nQuantidade: ${slot.count}" else "")
+                            .setPositiveButton("Fechar", null).show()
+                    }
+                }
+                tile.addView(text(iconFor(label, occupied), 26f, if (occupied) TEXT else MUTED).apply {
+                    gravity = Gravity.CENTER
+                })
+                tile.addView(text(label, 10f, if (occupied) TEXT else MUTED).apply {
+                    gravity = Gravity.CENTER
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(32)))
+                if (occupied && slot.count > 1) tile.addView(text("×${slot.count}", 10f, GOLD, true).apply {
+                    gravity = Gravity.CENTER
+                })
+                row.addView(tile, LinearLayout.LayoutParams(0, dp(96), 1f).apply {
+                    setMargins(dp(2), dp(2), dp(2), dp(2))
+                })
+            }
+            // Mantém a largura uniforme na última linha se houver slots parciais.
+            repeat(4 - group.size) { row.addView(View(this), LinearLayout.LayoutParams(0, dp(96), 1f)) }
+            inventoryGrid.addView(row, margin(0, 0))
+        }
+    }
+
     private fun confirmReset(message: String, callback: () -> Unit) {
         AlertDialog.Builder(this).setTitle("Confirmar zeramento")
             .setMessage(message).setNegativeButton("Cancelar", null)
@@ -376,7 +459,7 @@ class MainActivity : Activity() {
             editedBytes = result
             saves = readback
             appliedChanges++
-            lastChange.text = "✓ $label aplicado em ${paths.size} saves. $appliedChanges alteração(ões) em memória. Exporte o EK.bak para salvar."
+            lastChange.text = "✓ $label conferido em ${paths.size}/${paths.size} saves. $appliedChanges alteração(ões) em memória. Exporte o EK.bak para salvar."
             lastChange.setTextColor(Color.rgb(129, 214, 136))
             refreshPreview(false)
             updateEnabled()
@@ -393,6 +476,7 @@ class MainActivity : Activity() {
             traitCurrent.text = "Pontos livres atuais: —"
             skillCurrent.text = "Pontos livres atuais: —"
             itemsCurrent.text = "Nenhum inventário carregado"
+            inventoryGrid.removeAllViews()
             companionCard.visibility = View.GONE
             return
         }
@@ -404,12 +488,10 @@ class MainActivity : Activity() {
         skillCurrent.text = value("Pontos livres atuais", saves.map { it.skillPoints }, representative.skillPoints)
         if (fillGold) goldInput.setText(representative.gold.toString())
         val minimumFree = saves.minOf { it.freeSlots }
-        val details = representative.inventory.toList().sortedBy { catalog.name(it.first).lowercase() }
-            .joinToString("\n") { (id, count) -> "• ${catalog.name(id)} × $count" }
-        itemsCurrent.text = "Inventário de referência: ${representative.hero} (auto-save)\n" +
-            "Espaços livres no inventário exibido: ${representative.freeSlots}\n" +
-            "Espaços livres mínimos entre todos os saves: $minimumFree\n\n" +
-            (details.ifBlank { "Inventário vazio" })
+        itemsCurrent.text = "Inventário de referência: ${representative.hero}\n" +
+            "${representative.inventorySlots.size} espaços • ${representative.freeSlots} livres neste save\n" +
+            "Espaços livres mínimos entre todos os saves: $minimumFree"
+        refreshInventoryGrid(representative)
         val companions = saves.mapNotNull { it.companion }
         if (companions.isNotEmpty()) {
             val companion = representative.companion ?: companions.first()
@@ -475,10 +557,18 @@ class MainActivity : Activity() {
                     val bytes = pendingExport ?: error("Exportação cancelada")
                     contentResolver.openOutputStream(data.data!!, "w")?.use { it.write(bytes); it.flush() }
                         ?: error("Não foi possível gravar o backup")
+                    // Verifica o documento salvo; falhar nesta conferência não altera o backup original.
+                    val savedBytes = contentResolver.openInputStream(data.data!!)?.use { it.readBytes() }
+                        ?: error("Arquivo gravado, mas não foi possível reler para conferência")
+                    require(savedBytes.contentEquals(bytes)) { "O backup exportado difere do arquivo editado" }
+                    val checked = EkBackup.inspect(savedBytes)
+                    require(checked.map { it.path }.toSet() == saves.map { it.path }.toSet()) {
+                        "A exportação não contém todos os saves esperados"
+                    }
                     pendingExport = null
-                    setStatus("✓ Backup exportado. Agora restaure pelo menu do jogo.", true)
-                    AlertDialog.Builder(this).setTitle("Arquivo salvo")
-                        .setMessage("O EK.bak foi exportado. Copie o arquivo modificado para:\n$GAME_PATH\n\nDepois, abra Exiled Kingdoms e escolha RESTAURAR BACKUP. O arquivo original deve ficar preservado.")
+                    setStatus("✓ EK.bak exportado e conferido (${checked.size}/${saves.size} saves).", true)
+                    AlertDialog.Builder(this).setTitle("Arquivo salvo e conferido")
+                        .setMessage("A escrita foi verificada: ${checked.size} saves no EK.bak exportado.\n\nCopie o arquivo modificado para:\n$GAME_PATH\n\nDepois abra Exiled Kingdoms e escolha RESTAURAR BACKUP. Confira o nome final do arquivo no gerenciador, pois alguns aplicativos acrescentam números quando já existe EK.bak.")
                         .setPositiveButton("Entendi", null).show()
                 }
             }

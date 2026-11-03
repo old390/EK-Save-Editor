@@ -162,6 +162,50 @@ class EkBackupTest {
         assertEquals(3, EkBackup.inspect(reset).single().skillPoints)
     }
 
+    @Test fun changesAttributesInAllFourSaveEntriesAndKeepsIndependentValues() {
+        val original = ByteArrayOutputStream().also { output ->
+            ZipOutputStream(output).use { zip ->
+                listOf("auto.sav", "auto2.sav", "game.sav", "game2.sav").forEachIndexed { index, filename ->
+                    zip.putNextEntry(ZipEntry("saves/0/$filename"))
+                    zip.write(save(40 + index))
+                    zip.closeEntry()
+                }
+                zip.putNextEntry(ZipEntry("saves/global.sav"))
+                zip.write("global stays intact".toByteArray())
+                zip.closeEntry()
+            }
+        }.toByteArray()
+        val before = EkBackup.inspect(original)
+        assertEquals(4, before.size)
+        val target = before.map { it.path }.toSet()
+        val first = EkBackup.apply(original, EkBackup.EditPlan(target, traitDelta = 17))
+        val second = EkBackup.apply(first, EkBackup.EditPlan(target, traitDelta = 3))
+        val after = EkBackup.inspect(second)
+        assertEquals(target, after.map { it.path }.toSet())
+        assertTrue(after.all { it.traitPoints == 22 })
+        assertTrue(after.all { it.skillPoints == 3 })
+        assertEquals(before.map { it.gold }, after.map { it.gold })
+        assertTrue(entries(original).getValue("saves/global.sav")
+            .contentEquals(entries(second).getValue("saves/global.sav")))
+        for (info in after) {
+            val raw = String(Base64.getDecoder().decode(entries(second).getValue(info.path)))
+            assertTrue(raw.contains("\t\t\t\textraTraitPoints: 22"))
+        }
+    }
+
+    @Test fun inventorySlotsKeepRealOrderAfterApplyingToAllSaves() {
+        val original = fixture()
+        val all = EkBackup.inspect(original).map { it.path }.toSet()
+        val updated = EkBackup.apply(original, EkBackup.EditPlan(all,
+            items = listOf(EkBackup.ItemAdd(5070, 8))))
+        for (save in EkBackup.inspect(updated)) {
+            assertEquals(4, save.inventorySlots.size)
+            assertEquals(5070, save.inventorySlots[0].id)
+            assertEquals(8, save.inventorySlots[0].count)
+            assertEquals(3, save.inventorySlots.count { it.id == 0 })
+        }
+    }
+
     @Test fun noCompanionDoesNotCreateOne() {
         val paths = EkBackup.inspect(fixture()).map { it.path }.toSet()
         assertTrue(EkBackup.inspect(fixture()).all { it.companion == null })
