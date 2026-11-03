@@ -419,10 +419,22 @@ object EkBackup {
         if (plan.companionTraitDelta == null && plan.companionSkillDelta == null && !plan.resetCompanionTraits && !plan.resetCompanionSkills) return text
         val (active, partyRange) = activeCompanion(text) ?: return text // other saves may lack an active companion
         val currentParty = text.substring(partyRange)
-        val trait = increment(one(currentParty, anyTraitPattern, "atributos do companheiro"),
-            plan.companionTraitDelta, plan.resetCompanionTraits, "Atributos do companheiro")
-        val skill = increment(one(currentParty, anySkillPattern, "habilidades do companheiro"),
-            plan.companionSkillDelta, plan.resetCompanionSkills, "Habilidades do companheiro")
+        val traitBonus = anyTraitPattern.find(currentParty)?.groupValues?.get(2)?.toIntOrNull() ?: 0
+        val skillBonus = anySkillPattern.find(currentParty)?.groupValues?.get(2)?.toIntOrNull() ?: 0
+        val trait = if (plan.resetCompanionTraits) {
+            val balance = companionTraitBalance(currentParty)
+                ?: error("Gastos do companheiro não identificados: zeramento cancelado")
+            val newBonus = balance.spent - balance.byLevel
+            require(newBonus in 0..999) { "Não é seguro zerar atributos sem mexer nos pontos gastos" }
+            newBonus
+        } else increment(traitBonus, plan.companionTraitDelta, false, "Atributos do companheiro")
+        val skill = if (plan.resetCompanionSkills) {
+            val balance = skillBalance(currentParty, true)
+                ?: error("Habilidades aprendidas não identificadas: zeramento cancelado")
+            val newBonus = balance.spent - balance.byLevel
+            require(newBonus in 0..999) { "Não é seguro zerar habilidades sem remover níveis aprendidos" }
+            newBonus
+        } else increment(skillBonus, plan.companionSkillDelta, false, "Habilidades do companheiro")
         val blocks = mutableListOf(partyRange)
         // NPC copy of the active companion is kept consistent with party.companions.
         val gameData = block(text, "\ngamedata: {")
@@ -436,8 +448,8 @@ object EkBackup {
         var changed = text
         for (range in blocks.sortedByDescending { it.first }) {
             var part = changed.substring(range)
-            if (trait != null) part = replaceNumber(part, anyTraitPattern, trait)
-            if (skill != null) part = replaceNumber(part, anySkillPattern, skill)
+            if (trait != null) part = updateBonusField(part, anyTraitPattern, "extraTraitPoints", "traits: {", trait)
+            if (skill != null) part = updateBonusField(part, anySkillPattern, "bonusPoints", "skillSet: {", skill)
             changed = changed.replaceRange(range.first, range.last + 1, part)
         }
         return changed
@@ -459,17 +471,47 @@ object EkBackup {
             }
             else -> increment(one(player, traitPattern, "atributos extras"), plan.traitDelta, false, "Atributos")
         }
-        val skillValue = if (plan.skillPoints != null) plan.skillPoints else
-            increment(one(player, skillPattern, "habilidades"), plan.skillDelta, plan.resetSkills, "Habilidades")
+        val skillValue = if (plan.skillPoints != null) plan.skillPoints else if (plan.resetSkills) {
+            val balance = skillBalance(player, false)
+                ?: error("Não foi possível calcular habilidades aprendidas: zeramento cancelado")
+            val newBonus = balance.spent - balance.byLevel
+            require(newBonus in 0..999) {
+                "Não é possível zerar pontos livres sem remover habilidades já aprendidas"
+            }
+            newBonus
+        } else increment(one(player, skillPattern, "habilidades"), plan.skillDelta, false, "Habilidades")
         if (traitValue != null) player = replaceNumber(player, traitPattern, traitValue)
         if (skillValue != null) player = replaceNumber(player, skillPattern, skillValue)
         var modified = text.replaceRange(playerRange.first, playerRange.last + 1, player)
         modified = rewriteCompanion(modified, plan)
-        if (plan.items.isNotEmpty()) {
+        if (plan.items.isNotEmpty() || plan.slotEdits.isNotEmpty()) {
             val pack = backpack(modified)
             val ids = numbers(pack.groupValues[2])
             val units = numbers(pack.groupValues[4])
             require(ids.size == units.size) { "Inventário incompatível" }
+            for (edit in plan.slotEdits) {
+                val index = when {
+                    edit.index in ids.indices && ids[edit.index] == edit.expectedId -> edit.index
+                    else -> {
+                        val matches = ids.indices.filter { ids[it] == edit.expectedId }
+                        require(matches.isNotEmpty()) {
+                            "Item ID ${edit.expectedId} ausente em um dos saves. Nenhum save foi alterado."
+                        }
+                        val sameCount = matches.filter { units[it] == edit.expectedCount }
+                        val candidates = if (sameCount.isNotEmpty()) sameCount else matches
+                        require(candidates.size == 1) {
+                            "Mais de um stack igual no mesmo save; operação ambígua e cancelada."
+                        }
+                        candidates.single()
+                    }
+                }
+                if (edit.quantity == 0) {
+                    ids[index] = 0
+                    units[index] = 0
+                } else {
+                    units[index] = edit.quantity
+                }
+            }
             for ((id, count) in plan.items) {
                 val slot = ids.indexOf(id).takeIf { it >= 0 } ?: ids.indexOf(0)
                 require(slot >= 0) { "Inventário cheio! Não foi removido nenhum item. Libere espaço no jogo antes de adicionar." }
@@ -524,7 +566,9 @@ object EkBackup {
                 if (plan.resetTraits) require(now.freeTraitPoints == 0) {
                     "Não foi possível zerar os pontos livres em ${prev.path}"
                 }
-                if (plan.resetSkills) require(now.skillPoints == 0)
+                if (plan.resetSkills) require(now.freeSkillPoints == 0) {
+                    "Pontos livres de habilidades não foram zerados em ${prev.path}"
+                }
                 if (plan.traitDelta != null) {
                     require(now.traitPoints == prev.traitPoints + plan.traitDelta) {
                         "Falha ao somar extras em ${prev.path}"
@@ -538,13 +582,46 @@ object EkBackup {
                         }
                     }
                 }
-                if (plan.skillDelta != null) require(now.skillPoints == prev.skillPoints + plan.skillDelta)
-                if (plan.resetCompanionTraits && prev.companion != null) require(now.companion?.traitPoints == 0)
-                if (plan.resetCompanionSkills && prev.companion != null) require(now.companion?.skillPoints == 0)
-                if (plan.companionTraitDelta != null && prev.companion != null)
+                if (plan.skillDelta != null) {
+                    require(now.skillPoints == prev.skillPoints + plan.skillDelta)
+                    if (prev.freeSkillPoints != null) require(now.freeSkillPoints == prev.freeSkillPoints + plan.skillDelta) {
+                        "Habilidades livres não aumentaram em ${prev.path}"
+                    }
+                }
+                if (plan.resetCompanionTraits && prev.companion != null)
+                    require(now.companion?.freeTraitPoints == 0)
+                if (plan.resetCompanionSkills && prev.companion != null)
+                    require(now.companion?.freeSkillPoints == 0)
+                if (plan.companionTraitDelta != null && prev.companion != null) {
                     require(now.companion?.traitPoints == prev.companion.traitPoints + plan.companionTraitDelta)
-                if (plan.companionSkillDelta != null && prev.companion != null)
+                    if (prev.companion.freeTraitPoints != null)
+                        require(now.companion?.freeTraitPoints == prev.companion.freeTraitPoints + plan.companionTraitDelta)
+                }
+                if (plan.companionSkillDelta != null && prev.companion != null) {
                     require(now.companion?.skillPoints == prev.companion.skillPoints + plan.companionSkillDelta)
+                    if (prev.companion.freeSkillPoints != null)
+                        require(now.companion?.freeSkillPoints == prev.companion.freeSkillPoints + plan.companionSkillDelta)
+                }
+                for (edit in plan.slotEdits) {
+                    val prevStacks = prev.inventorySlots.filter { it.id == edit.expectedId }
+                    val nextStacks = now.inventorySlots.filter { it.id == edit.expectedId }
+                    require(prevStacks.size - if (edit.quantity == 0) 1 else 0 == nextStacks.size) {
+                        "Quantidade de stacks não confere após edição do inventário"
+                    }
+                    val oldTotal = prev.inventory[edit.expectedId] ?: 0
+                    val newTotal = now.inventory[edit.expectedId] ?: 0
+                    val selectedStack = prev.inventorySlots.getOrNull(edit.index)
+                    val effectiveCount = if (selectedStack?.id == edit.expectedId) selectedStack.count else {
+                        val sameCount = prevStacks.filter { it.count == edit.expectedCount }
+                        if (sameCount.size == 1) edit.expectedCount else {
+                            require(prevStacks.size == 1) { "Stack do item ambíguo" }
+                            prevStacks.single().count
+                        }
+                    }
+                    require(newTotal == oldTotal - effectiveCount + edit.quantity) {
+                        "Falha ao validar quantidade do item ID ${edit.expectedId}"
+                    }
+                }
                 for (item in plan.items) require(now.inventory[item.id] == item.count) { "Item não aplicado" }
             }
         }
