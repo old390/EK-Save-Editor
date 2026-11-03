@@ -27,7 +27,8 @@ object EkBackup {
         val gold: Long,
         val traitPoints: Int,
         val skillPoints: Int,
-        val freeSlots: Int
+        val freeSlots: Int,
+        val inventory: Map<Int, Int>
     )
 
     data class ItemAdd(val id: Int, val count: Int = 1)
@@ -145,7 +146,9 @@ object EkBackup {
             gold = one(player, goldPattern, "gold").toLong(),
             traitPoints = one(player, traitPattern, "extraTraitPoints").toInt(),
             skillPoints = one(player, skillPattern, "bonusPoints").toInt(),
-            freeSlots = itemList.count { it == 0 }
+            freeSlots = itemList.count { it == 0 },
+            inventory = itemList.zip(units).filter { it.first > 0 }
+                .groupBy({ it.first }, { it.second }).mapValues { (_, quantities) -> quantities.sum() }
         )
     }.also { require(it.isNotEmpty()) { "Nenhum save game/auto encontrado no EK.bak" } }
 

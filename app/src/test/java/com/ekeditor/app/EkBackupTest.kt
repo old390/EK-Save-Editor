@@ -75,6 +75,8 @@ class EkBackupTest {
         assertEquals(10, after.first { it.path.endsWith("game.sav") }.traitPoints)
         assertEquals(20, after.first { it.path.endsWith("game.sav") }.skillPoints)
         assertEquals(22L, after.first { it.path.endsWith("auto.sav") }.gold)
+        assertEquals(1, after.first { it.path.endsWith("game.sav") }.inventory[554])
+        assertEquals(999, after.first { it.path.endsWith("game.sav") }.inventory[5070])
         val orig = entries(original)
         val out = entries(edited)
         assertEquals(orig.keys, out.keys)
@@ -91,6 +93,20 @@ class EkBackupTest {
         assertTrue(EkBackup.inspect(edited).all { it.gold == 12345L })
         assertTrue(entries(original).getValue("saves/0/game.sav.nfo")
             .contentEquals(entries(edited).getValue("saves/0/game.sav.nfo")))
+    }
+
+    @Test fun consecutiveButtonsPreservePreviousChangesAndUpdatePreview() {
+        val original = fixture()
+        val selected = setOf("saves/0/game.sav")
+        val afterGold = EkBackup.apply(original, EkBackup.EditPlan(selected, gold = 500))
+        val afterTraits = EkBackup.apply(afterGold, EkBackup.EditPlan(selected, traitPoints = 99))
+        val afterPotion = EkBackup.apply(afterTraits, EkBackup.EditPlan(selected, items = listOf(EkBackup.ItemAdd(5070, 777))))
+        val selectedInfo = EkBackup.inspect(afterPotion).single { it.path in selected }
+        assertEquals(500L, selectedInfo.gold)
+        assertEquals(99, selectedInfo.traitPoints)
+        assertEquals(777, selectedInfo.inventory[5070])
+        assertEquals(11L, EkBackup.inspect(original).single { it.path in selected }.gold)
+        assertEquals(22L, EkBackup.inspect(afterPotion).single { it.path.endsWith("auto.sav") }.gold)
     }
 
     @Test(expected = IllegalArgumentException::class)
