@@ -489,11 +489,14 @@ class EkBackupTest {
             .contentEquals(entries(deleted).getValue("saves/global.sav")))
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun inventoryGridRefusesToDeleteMissingItemInOneSave() {
+    @Test fun inventoryGridDeletionSkipsMissingItemInAnotherSaveWithoutRemovingOthers() {
         val data = archiveWithShiftedItem(missingGameItem = true)
-        EkBackup.apply(data, EkBackup.EditPlan(EkBackup.inspect(data).map { it.path }.toSet(),
+        val paths = EkBackup.inspect(data).map { it.path }.toSet()
+        val edited = EkBackup.apply(data, EkBackup.EditPlan(paths,
             slotEdits = listOf(EkBackup.SlotEdit(0, 5070, 7, 0))))
+        val after = EkBackup.inspect(edited)
+        assertTrue(after.all { 5070 !in it.inventory })
+        assertEquals(1, after.single { it.path.endsWith("/game.sav") }.inventory[554])
     }
 
 
